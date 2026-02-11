@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+database:
+  url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/webhooks}
+  user: ${DATABASE_USER:webhook_user}
+  password: ${DATABASE_PASSWORD:webhook_pass}
+  pool-size: 5
+  connection-timeout: 30000
+
+proxy:
+  timeout-ms: 10000
+  max-retries: 0
+
+webhook:
+  max-log-count-default: 100
+  cleanup-interval-hours: 24
+
+logging:
+  level: INFO

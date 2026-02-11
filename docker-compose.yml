@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: webhook-db
+    environment:
+      POSTGRES_DB: webhooks
+      POSTGRES_USER: webhook_user
+      POSTGRES_PASSWORD: webhook_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhook_user -d webhooks"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Webhook Service Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: webhook-service
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/webhooks
+      DATABASE_USER: webhook_user
+      DATABASE_PASSWORD: webhook_pass
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local

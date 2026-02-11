@@ -1,0 +1,122 @@
+openapi: 3.0.3
+info:
+  title: Dynamic Webhook Service API
+  description: REST API для управления динамическими вебхуками
+  version: 1.0.0
+  contact:
+    name: Team
+    email: support@webhookservice.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: webhooks
+    description: Управление вебхуками
+  - name: requests
+    description: История принятых запросов
+  - name: templates
+    description: Шаблонизатор
+
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/webhooks:
+    post:
+      tags:
+        - webhooks
+      summary: Создать новый вебхук
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: GitHub Push Events
+                description:
+                  type: string
+                  example: Webhook for GitHub push events
+                methods:
+                  type: array
+                  items:
+                    type: string
+                    enum: [GET, POST]
+                  example: [POST]
+      responses:
+        '201':
+          description: Вебхук создан
+        '400':
+          description: Ошибка валидации
+
+    get:
+      tags:
+        - webhooks
+      summary: Получить список вебхуков
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Список вебхуков
+
+components:
+  schemas:
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        methods:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        status:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
