@@ -1,14 +1,13 @@
 version: "3.8"
 
 services:
-  # PostgreSQL Database
   db:
     image: postgres:16-alpine
     container_name: webhook-db
     environment:
       POSTGRES_DB: webhooks
       POSTGRES_USER: webhook_user
-      POSTGRES_PASSWORD: webhook_pass
+      POSTGRES_PASSWORD: webhook_password
     ports:
       - "5432:5432"
     volumes:
@@ -19,7 +18,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Webhook Service Application
   app:
     build:
       context: .
