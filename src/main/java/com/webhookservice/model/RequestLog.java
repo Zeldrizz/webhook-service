@@ -20,6 +20,11 @@ public record RequestLog(
         Long proxyDurationMs
 ) {
 
+    public RequestLog withBody(String body) {
+        return new RequestLog(id, webhookId, receivedAt, method, url, queryParams, headers,
+                body, contentType, sourceIp, responseStatus, proxyResponse, proxyDurationMs);
+    }
+
     public RequestLog withProxyResult(Integer responseStatus, String proxyResponse, Long proxyDurationMs) {
         return new RequestLog(id, webhookId, receivedAt, method, url, queryParams, headers,
                 body, contentType, sourceIp, responseStatus, proxyResponse, proxyDurationMs);

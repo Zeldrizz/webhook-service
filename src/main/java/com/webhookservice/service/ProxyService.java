@@ -36,13 +36,23 @@ public class ProxyService {
 
         long startTime = System.nanoTime();
 
-        HttpRequest<Buffer> proxyRequest = new ProxyRequestBuilder(webClient)
+        ProxyRequestBuilder requestBuilder = new ProxyRequestBuilder(webClient)
                 .method(requestLog.method())
                 .url(webhook.proxyUrl())
                 .headers(webhook.proxyHeaders())
                 .header("X-Webhook-Id", webhook.id().toString())
-                .header("X-Webhook-Name", webhook.name())
-                .build();
+                .header("X-Webhook-Name", webhook.name());
+
+        if (requestLog.contentType() != null && !requestLog.contentType().isBlank()
+                && !hasHeader(webhook.proxyHeaders(), "Content-Type")) {
+            requestBuilder.header("Content-Type", requestLog.contentType());
+        }
+
+        if (requestLog.sourceIp() != null && !requestLog.sourceIp().isBlank()) {
+            requestBuilder.header("X-Forwarded-For", requestLog.sourceIp());
+        }
+
+        HttpRequest<Buffer> proxyRequest = requestBuilder.build();
 
         proxyRequest.timeout(timeoutMs);
 
@@ -69,6 +79,12 @@ public class ProxyService {
                     return Future.succeededFuture(
                             requestLog.withProxyResult(502, errorMsg, durationMs));
                 });
+    }
+
+
+    private boolean hasHeader(java.util.Map<String, String> headers, String name) {
+        if (headers == null || headers.isEmpty()) return false;
+        return headers.keySet().stream().anyMatch(key -> key.equalsIgnoreCase(name));
     }
 
     private String classifyError(Throwable err) {

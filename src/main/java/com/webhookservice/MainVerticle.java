@@ -2,9 +2,15 @@ package com.webhookservice;
 
 import com.webhookservice.config.AppConfig;
 import com.webhookservice.handler.ErrorHandler;
+import com.webhookservice.handler.RequestLogHandler;
+import com.webhookservice.handler.TemplateHandler;
 import com.webhookservice.handler.WebhookApiHandler;
+import com.webhookservice.handler.WebhookReceiverHandler;
+import com.webhookservice.repository.impl.JdbcRequestLogRepository;
 import com.webhookservice.repository.impl.JdbcWebhookRepository;
 import com.webhookservice.service.ProxyService;
+import com.webhookservice.service.RequestLogService;
+import com.webhookservice.service.TemplateService;
 import com.webhookservice.service.WebhookService;
 import com.webhookservice.util.DatabaseManager;
 import io.vertx.core.AbstractVerticle;
@@ -31,11 +37,18 @@ public class MainVerticle extends AbstractVerticle {
         databaseManager.runMigrations();
 
         var webhookRepository = new JdbcWebhookRepository(databaseManager);
+        var requestLogRepository = new JdbcRequestLogRepository(databaseManager);
+
         var webhookService = new WebhookService(webhookRepository, vertx);
+        var requestLogService = new RequestLogService(requestLogRepository, vertx);
+        var templateService = new TemplateService();
         proxyService = new ProxyService(vertx, config.proxyTimeoutMs());
 
         String baseUrl = "http://localhost:" + config.serverPort();
         var webhookApiHandler = new WebhookApiHandler(webhookService, baseUrl);
+        var requestLogHandler = new RequestLogHandler(webhookService, requestLogService);
+        var webhookReceiverHandler = new WebhookReceiverHandler(webhookService, requestLogService, proxyService, templateService);
+        var templateHandler = new TemplateHandler(templateService);
 
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create().setBodyLimit(1_048_576));
@@ -48,13 +61,25 @@ public class MainVerticle extends AbstractVerticle {
 
         router.post("/api/webhooks").handler(webhookApiHandler::create);
         router.get("/api/webhooks").handler(webhookApiHandler::list);
+        router.get("/api/webhooks/slug/:slug").handler(webhookApiHandler::getBySlug);
         router.get("/api/webhooks/:id").handler(webhookApiHandler::getById);
         router.put("/api/webhooks/:id").handler(webhookApiHandler::update);
         router.delete("/api/webhooks/:id").handler(webhookApiHandler::delete);
         router.patch("/api/webhooks/:id/toggle").handler(webhookApiHandler::toggle);
 
-        // TODO (Ксения): RequestLogHandler, WebhookReceiverHandler, TemplateHandler
-        // Зависимости: webhookService, proxyService, databaseManager, vertx
+        router.get("/api/webhooks/:id/requests").handler(requestLogHandler::list);
+        router.get("/api/webhooks/:id/requests/:requestId").handler(requestLogHandler::getById);
+        router.delete("/api/webhooks/:id/requests").handler(requestLogHandler::clear);
+        router.get("/api/webhooks/:id/stats").handler(requestLogHandler::stats);
+
+        router.post("/api/templates/preview").handler(templateHandler::preview);
+        router.route("/webhook/:slug").handler(webhookReceiverHandler::handle);
+
+        router.get("/swagger").handler(ctx -> ctx.reroute("/swagger/index.html"));
+        router.route("/swagger/*").handler(StaticHandler.create("swagger-ui")
+                .setCachingEnabled(false));
+        router.route("/docs/*").handler(StaticHandler.create("docs")
+                .setCachingEnabled(false));
 
         router.route("/*").handler(StaticHandler.create("webroot")
                 .setCachingEnabled(true)
