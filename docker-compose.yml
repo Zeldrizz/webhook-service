@@ -26,7 +26,7 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/webhooks
       DATABASE_USER: webhook_user
-      DATABASE_PASSWORD: webhook_pass
+      DATABASE_PASSWORD: webhook_password
     ports:
       - "8080:8080"
     depends_on:
