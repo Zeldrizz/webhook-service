@@ -24,6 +24,31 @@ public record AppConfig(
 
     private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
 
+    public PgEndpoint pgEndpoint() {
+        String url = databaseUrl;
+        String prefix = "jdbc:postgresql://";
+        if (url == null || !url.startsWith(prefix)) {
+            return new PgEndpoint("localhost", 5432, "webhooks");
+        }
+        String rest = url.substring(prefix.length());
+        int slash = rest.indexOf('/');
+        String hostPort = slash >= 0 ? rest.substring(0, slash) : rest;
+        String dbAndQuery = slash >= 0 ? rest.substring(slash + 1) : "webhooks";
+        int q = dbAndQuery.indexOf('?');
+        String db = q >= 0 ? dbAndQuery.substring(0, q) : dbAndQuery;
+        int colon = hostPort.indexOf(':');
+        String host = colon >= 0 ? hostPort.substring(0, colon) : hostPort;
+        int port;
+        try {
+            port = colon >= 0 ? Integer.parseInt(hostPort.substring(colon + 1)) : 5432;
+        } catch (NumberFormatException e) {
+            port = 5432;
+        }
+        return new PgEndpoint(host, port, db);
+    }
+
+    public record PgEndpoint(String host, int port, String database) {}
+
     public static AppConfig load() {
         JsonObject config = loadYamlAsJson();
         return new AppConfig(
