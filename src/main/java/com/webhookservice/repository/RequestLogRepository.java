@@ -3,21 +3,22 @@ package com.webhookservice.repository;
 import com.webhookservice.model.RequestLog;
 import com.webhookservice.model.dto.Page;
 import com.webhookservice.model.dto.StatsResponse;
+import io.vertx.core.Future;
 
 import java.util.Optional;
 import java.util.UUID;
 
 public interface RequestLogRepository {
 
-    RequestLog save(RequestLog requestLog);
+    Future<RequestLog> save(RequestLog requestLog);
 
-    Page<RequestLog> findByWebhookId(UUID webhookId, int page, int size);
+    Future<Page<RequestLog>> findByWebhookId(UUID webhookId, int page, int size);
 
-    Optional<RequestLog> findByWebhookIdAndId(UUID webhookId, UUID requestId);
+    Future<Optional<RequestLog>> findByWebhookIdAndId(UUID webhookId, UUID requestId);
 
-    long deleteByWebhookId(UUID webhookId);
+    Future<Long> deleteByWebhookId(UUID webhookId);
 
-    StatsResponse getStats(UUID webhookId);
+    Future<StatsResponse> getStats(UUID webhookId);
 
-    void trimToMaxCount(UUID webhookId, int maxCount);
+    Future<Void> trimToMaxCount(UUID webhookId, int maxCount);
 }
