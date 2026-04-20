@@ -11,7 +11,6 @@ public class App {
 
     public static void main(String[] args) {
         VertxOptions options = new VertxOptions()
-                .setWorkerPoolSize(20)
                 .setEventLoopPoolSize(Runtime.getRuntime().availableProcessors());
 
         Vertx vertx = Vertx.vertx(options);

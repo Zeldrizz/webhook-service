@@ -6,8 +6,8 @@ import com.webhookservice.handler.RequestLogHandler;
 import com.webhookservice.handler.TemplateHandler;
 import com.webhookservice.handler.WebhookApiHandler;
 import com.webhookservice.handler.WebhookReceiverHandler;
-import com.webhookservice.repository.impl.JdbcRequestLogRepository;
-import com.webhookservice.repository.impl.JdbcWebhookRepository;
+import com.webhookservice.repository.impl.PgRequestLogRepository;
+import com.webhookservice.repository.impl.PgWebhookRepository;
 import com.webhookservice.service.ProxyService;
 import com.webhookservice.service.RequestLogService;
 import com.webhookservice.service.TemplateService;
@@ -33,14 +33,15 @@ public class MainVerticle extends AbstractVerticle {
     public void start(Promise<Void> startPromise) {
         AppConfig config = AppConfig.load();
 
-        databaseManager = new DatabaseManager(config);
+        databaseManager = new DatabaseManager(vertx, config);
         databaseManager.runMigrations();
 
-        var webhookRepository = new JdbcWebhookRepository(databaseManager);
-        var requestLogRepository = new JdbcRequestLogRepository(databaseManager);
+        var pool = databaseManager.pool();
+        var webhookRepository = new PgWebhookRepository(pool);
+        var requestLogRepository = new PgRequestLogRepository(pool);
 
-        var webhookService = new WebhookService(webhookRepository, vertx);
-        var requestLogService = new RequestLogService(requestLogRepository, vertx);
+        var webhookService = new WebhookService(webhookRepository);
+        var requestLogService = new RequestLogService(requestLogRepository);
         var templateService = new TemplateService();
         proxyService = new ProxyService(vertx, config.proxyTimeoutMs());
 
