@@ -6,20 +6,27 @@ import com.webhookservice.model.dto.Page;
 import com.webhookservice.model.dto.UpdateWebhookDto;
 import com.webhookservice.repository.WebhookRepository;
 import com.webhookservice.validation.ValidationException;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith({VertxExtension.class, MockitoExtension.class})
 class WebhookServiceTest {
@@ -30,8 +37,8 @@ class WebhookServiceTest {
     private WebhookService webhookService;
 
     @BeforeEach
-    void setUp(Vertx vertx) {
-        webhookService = new WebhookService(webhookRepository, vertx);
+    void setUp() {
+        webhookService = new WebhookService(webhookRepository);
     }
 
     @Test
@@ -40,7 +47,8 @@ class WebhookServiceTest {
                 "Test Webhook", "A test webhook", "GET,POST",
                 true, null, null, null, null, null);
 
-        when(webhookRepository.save(any(Webhook.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(webhookRepository.save(any(Webhook.class)))
+                .thenAnswer(inv -> Future.succeededFuture(inv.getArgument(0)));
 
         webhookService.create(dto)
                 .onComplete(tc.succeeding(webhook -> tc.verify(() -> {
@@ -55,7 +63,7 @@ class WebhookServiceTest {
     }
 
     @Test
-    void create_withBlankName_throwsValidationException(Vertx vertx, VertxTestContext tc) {
+    void create_withBlankName_failsWithValidationException(Vertx vertx, VertxTestContext tc) {
         CreateWebhookDto dto = new CreateWebhookDto(
                 "", null, null, null, null, null, null, null, null);
 
@@ -67,7 +75,7 @@ class WebhookServiceTest {
     }
 
     @Test
-    void create_withNullName_throwsValidationException(Vertx vertx, VertxTestContext tc) {
+    void create_withNullName_failsWithValidationException(Vertx vertx, VertxTestContext tc) {
         CreateWebhookDto dto = new CreateWebhookDto(
                 null, null, null, null, null, null, null, null, null);
 
@@ -82,7 +90,7 @@ class WebhookServiceTest {
     void getById_existing_returnsWebhook(Vertx vertx, VertxTestContext tc) {
         UUID id = UUID.randomUUID();
         Webhook webhook = createSampleWebhook(id);
-        when(webhookRepository.findById(id)).thenReturn(Optional.of(webhook));
+        when(webhookRepository.findById(id)).thenReturn(Future.succeededFuture(Optional.of(webhook)));
 
         webhookService.getById(id)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -95,7 +103,7 @@ class WebhookServiceTest {
     @Test
     void getById_nonExisting_returnsNull(Vertx vertx, VertxTestContext tc) {
         UUID id = UUID.randomUUID();
-        when(webhookRepository.findById(id)).thenReturn(Optional.empty());
+        when(webhookRepository.findById(id)).thenReturn(Future.succeededFuture(Optional.empty()));
 
         webhookService.getById(id)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -107,7 +115,8 @@ class WebhookServiceTest {
     @Test
     void getBySlug_existing_returnsWebhook(Vertx vertx, VertxTestContext tc) {
         Webhook webhook = createSampleWebhook(UUID.randomUUID());
-        when(webhookRepository.findBySlug("test-slug")).thenReturn(Optional.of(webhook));
+        when(webhookRepository.findBySlug("test-slug"))
+                .thenReturn(Future.succeededFuture(Optional.of(webhook)));
 
         webhookService.getBySlug("test-slug")
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -120,7 +129,7 @@ class WebhookServiceTest {
     void list_returnsPagedResults(Vertx vertx, VertxTestContext tc) {
         List<Webhook> webhooks = List.of(createSampleWebhook(UUID.randomUUID()));
         Page<Webhook> page = new Page<>(webhooks, 0, 20, 1L);
-        when(webhookRepository.findAll(0, 20)).thenReturn(page);
+        when(webhookRepository.findAll(0, 20)).thenReturn(Future.succeededFuture(page));
 
         webhookService.list(0, 20)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -140,7 +149,7 @@ class WebhookServiceTest {
                 existing.methods(), existing.isActive(), existing.debugMode(), existing.proxyUrl(),
                 existing.proxyHeaders(), existing.requestTemplate(), existing.responseTemplate(),
                 existing.maxLogCount(), existing.createdAt(), Instant.now());
-        when(webhookRepository.update(eq(id), any())).thenReturn(updated);
+        when(webhookRepository.update(eq(id), any())).thenReturn(Future.succeededFuture(updated));
 
         UpdateWebhookDto dto = new UpdateWebhookDto(
                 "Updated Name", null, null, null, null, null, null, null, null);
@@ -156,7 +165,7 @@ class WebhookServiceTest {
     @Test
     void delete_existing_returnsTrue(Vertx vertx, VertxTestContext tc) {
         UUID id = UUID.randomUUID();
-        when(webhookRepository.deleteById(id)).thenReturn(true);
+        when(webhookRepository.deleteById(id)).thenReturn(Future.succeededFuture(true));
 
         webhookService.delete(id)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -171,7 +180,7 @@ class WebhookServiceTest {
         Webhook toggled = new Webhook(id, "Test Webhook", "test-slug", "desc",
                 "GET,POST", false, true, null, Map.of(),
                 null, null, 100, Instant.now(), Instant.now());
-        when(webhookRepository.toggleActive(id)).thenReturn(toggled);
+        when(webhookRepository.toggleActive(id)).thenReturn(Future.succeededFuture(toggled));
 
         webhookService.toggle(id)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {

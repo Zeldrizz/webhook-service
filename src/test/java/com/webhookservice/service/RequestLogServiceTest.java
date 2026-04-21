@@ -4,6 +4,7 @@ import com.webhookservice.model.RequestLog;
 import com.webhookservice.model.dto.Page;
 import com.webhookservice.model.dto.StatsResponse;
 import com.webhookservice.repository.RequestLogRepository;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -20,8 +21,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith({VertxExtension.class, MockitoExtension.class})
 class RequestLogServiceTest {
@@ -32,14 +33,16 @@ class RequestLogServiceTest {
     private RequestLogService requestLogService;
 
     @BeforeEach
-    void setUp(Vertx vertx) {
-        requestLogService = new RequestLogService(requestLogRepository, vertx);
+    void setUp() {
+        requestLogService = new RequestLogService(requestLogRepository);
     }
 
     @Test
     void save_savesAndTrims(Vertx vertx, VertxTestContext tc) {
         RequestLog log = createTestLog();
-        when(requestLogRepository.save(log)).thenReturn(log);
+        when(requestLogRepository.save(log)).thenReturn(Future.succeededFuture(log));
+        when(requestLogRepository.trimToMaxCount(log.webhookId(), 100))
+                .thenReturn(Future.succeededFuture());
 
         requestLogService.save(log, 100)
                 .onComplete(tc.succeeding(saved -> tc.verify(() -> {
@@ -54,7 +57,8 @@ class RequestLogServiceTest {
     void listByWebhookId_returnsPage(Vertx vertx, VertxTestContext tc) {
         UUID webhookId = UUID.randomUUID();
         Page<RequestLog> page = new Page<>(List.of(createTestLog()), 0, 20, 1L);
-        when(requestLogRepository.findByWebhookId(webhookId, 0, 20)).thenReturn(page);
+        when(requestLogRepository.findByWebhookId(webhookId, 0, 20))
+                .thenReturn(Future.succeededFuture(page));
 
         requestLogService.listByWebhookId(webhookId, 0, 20)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -68,7 +72,7 @@ class RequestLogServiceTest {
     void getByWebhookIdAndId_existing_returnsLog(Vertx vertx, VertxTestContext tc) {
         RequestLog log = createTestLog();
         when(requestLogRepository.findByWebhookIdAndId(log.webhookId(), log.id()))
-                .thenReturn(Optional.of(log));
+                .thenReturn(Future.succeededFuture(Optional.of(log)));
 
         requestLogService.getByWebhookIdAndId(log.webhookId(), log.id())
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -83,7 +87,7 @@ class RequestLogServiceTest {
         UUID webhookId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         when(requestLogRepository.findByWebhookIdAndId(webhookId, requestId))
-                .thenReturn(Optional.empty());
+                .thenReturn(Future.succeededFuture(Optional.empty()));
 
         requestLogService.getByWebhookIdAndId(webhookId, requestId)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -95,7 +99,7 @@ class RequestLogServiceTest {
     @Test
     void clearByWebhookId_returnsDeletedCount(Vertx vertx, VertxTestContext tc) {
         UUID webhookId = UUID.randomUUID();
-        when(requestLogRepository.deleteByWebhookId(webhookId)).thenReturn(5L);
+        when(requestLogRepository.deleteByWebhookId(webhookId)).thenReturn(Future.succeededFuture(5L));
 
         requestLogService.clearByWebhookId(webhookId)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
@@ -109,7 +113,7 @@ class RequestLogServiceTest {
     void getStats_returnsStats(Vertx vertx, VertxTestContext tc) {
         UUID webhookId = UUID.randomUUID();
         StatsResponse stats = new StatsResponse(10, 3, Map.of("GET", 4L, "POST", 6L), Instant.now());
-        when(requestLogRepository.getStats(webhookId)).thenReturn(stats);
+        when(requestLogRepository.getStats(webhookId)).thenReturn(Future.succeededFuture(stats));
 
         requestLogService.getStats(webhookId)
                 .onComplete(tc.succeeding(result -> tc.verify(() -> {
