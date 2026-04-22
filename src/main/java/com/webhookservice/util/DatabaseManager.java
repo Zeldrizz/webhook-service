@@ -5,7 +5,6 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import org.flywaydb.core.Flyway;
@@ -22,32 +21,23 @@ public final class DatabaseManager {
     public DatabaseManager(Vertx vertx, AppConfig config) {
         this.config = config;
 
-        AppConfig.PgEndpoint endpoint = config.pgEndpoint();
+        PgConnectOptions connectOptions = config.pgConnectOptions();
 
-        PgConnectOptions connectOptions = new PgConnectOptions()
-                .setHost(endpoint.host())
-                .setPort(endpoint.port())
-                .setDatabase(endpoint.database())
-                .setUser(config.databaseUser())
-                .setPassword(config.databasePassword())
-                .setCachePreparedStatements(true)
-                .setReconnectAttempts(2)
-                .setReconnectInterval(1000);
+        long connectionTimeoutSec = config.databaseConnectionTimeout() / 1000;
+        int poolTimeoutSec = connectionTimeoutSec > Integer.MAX_VALUE
+                ? Integer.MAX_VALUE
+                : (int) connectionTimeoutSec;
 
         PoolOptions poolOptions = new PoolOptions()
                 .setMaxSize(config.databasePoolSize())
-                .setConnectionTimeout((int) (config.databaseConnectionTimeout() / 1000))
+                .setConnectionTimeout(poolTimeoutSec)
                 .setName("webhook-pg-pool");
 
-        this.pgPool = PgPool.pool(vertx, connectOptions, poolOptions);
-        log.info("Vert.x PgPool initialized: host={}, port={}, db={}, maxSize={}",
-                endpoint.host(), endpoint.port(), endpoint.database(), config.databasePoolSize());
+        this.pgPool = Pool.pool(vertx, connectOptions, poolOptions);
+        log.info("Vert.x PgPool initialized: db={}, maxSize={}, timeout={}s",
+                connectOptions.getDatabase(), config.databasePoolSize(), poolTimeoutSec);
     }
 
-    /**
-     * Runs Flyway migrations using a temporary blocking JDBC connection that is
-     * closed before the application starts serving traffic.
-     */
     public void runMigrations() {
         HikariConfig hikari = new HikariConfig();
         hikari.setJdbcUrl(config.databaseUrl());
