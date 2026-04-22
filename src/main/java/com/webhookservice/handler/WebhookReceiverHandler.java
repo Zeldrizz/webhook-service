@@ -189,11 +189,7 @@ public class WebhookReceiverHandler {
         if (value == null || value.isBlank()) {
             return false;
         }
-        try {
-            JsonUtil.mapper().readTree(value);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+        String trimmed = value.trim();
+        return trimmed.startsWith("{") || trimmed.startsWith("[");
     }
 }
