@@ -1,13 +1,13 @@
 package com.webhookservice.config;
 
 import io.vertx.core.json.JsonObject;
+import io.vertx.pgclient.PgConnectOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 public record AppConfig(
         int serverPort,
@@ -24,38 +24,32 @@ public record AppConfig(
 
     private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
 
-    public PgEndpoint pgEndpoint() {
-        String url = databaseUrl;
-        String prefix = "jdbc:postgresql://";
-        if (url == null || !url.startsWith(prefix)) {
-            return new PgEndpoint("localhost", 5432, "webhooks");
-        }
-        String rest = url.substring(prefix.length());
-        int slash = rest.indexOf('/');
-        String hostPort = slash >= 0 ? rest.substring(0, slash) : rest;
-        String dbAndQuery = slash >= 0 ? rest.substring(slash + 1) : "webhooks";
-        int q = dbAndQuery.indexOf('?');
-        String db = q >= 0 ? dbAndQuery.substring(0, q) : dbAndQuery;
-        int colon = hostPort.indexOf(':');
-        String host = colon >= 0 ? hostPort.substring(0, colon) : hostPort;
-        int port;
-        try {
-            port = colon >= 0 ? Integer.parseInt(hostPort.substring(colon + 1)) : 5432;
-        } catch (NumberFormatException e) {
-            port = 5432;
-        }
-        return new PgEndpoint(host, port, db);
+    public PgConnectOptions pgConnectOptions() {
+        String resolvedUrl = resolveEnv(databaseUrl);
+        String uri = stripJdbcPrefix(resolvedUrl);
+        PgConnectOptions options = PgConnectOptions.fromUri(uri)
+                .setUser(databaseUser())
+                .setPassword(databasePassword())
+                .setCachePreparedStatements(true)
+                .setReconnectAttempts(2)
+                .setReconnectInterval(1000);
+        return options;
     }
 
-    public record PgEndpoint(String host, int port, String database) {}
+    private static String stripJdbcPrefix(String url) {
+        if (url != null && url.startsWith("jdbc:")) {
+            return url.substring(5);
+        }
+        return url;
+    }
 
     public static AppConfig load() {
         JsonObject config = loadYamlAsJson();
         return new AppConfig(
                 config.getInteger("server.port", 8080),
-                resolveEnv(config.getString("database.url", "jdbc:postgresql://localhost:5432/webhooks")),
-                resolveEnv(config.getString("database.user", "webhook_user")),
-                resolveEnv(config.getString("database.password", "webhook_pass")),
+                config.getString("database.url", "jdbc:postgresql://localhost:5432/webhooks"),
+                config.getString("database.user", "webhook_user"),
+                config.getString("database.password", "webhook_pass"),
                 config.getInteger("database.pool-size", 5),
                 config.getLong("database.connection-timeout", 30000L),
                 config.getLong("proxy.timeout-ms", 10000L),
@@ -99,18 +93,15 @@ public record AppConfig(
             String key = line.substring(0, colonIdx).trim();
             String valuePart = line.substring(colonIdx + 1).trim();
 
-            // Adjust depth based on indentation
             while (depth > 0 && indent <= indentStack[depth - 1]) {
                 depth--;
             }
 
             if (valuePart.isEmpty()) {
-                // This is a parent key
                 prefixStack[depth] = key;
                 indentStack[depth] = indent;
                 depth++;
             } else {
-                // This is a leaf key: value
                 StringBuilder fullKey = new StringBuilder();
                 for (int i = 0; i < depth; i++) {
                     fullKey.append(prefixStack[i]).append('.');
