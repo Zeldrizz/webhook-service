@@ -22,7 +22,7 @@ class ProxyServiceTest {
 
     @BeforeEach
     void setUp(Vertx vertx) {
-        proxyService = new ProxyService(vertx, 5000);
+        proxyService = new ProxyService(vertx, 5000, 0);
     }
 
     @Test

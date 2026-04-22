@@ -12,24 +12,34 @@ import io.vertx.ext.web.client.WebClientOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Function;
+
 public class ProxyService {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyService.class);
 
     private final WebClient webClient;
     private final long timeoutMs;
+    private final int maxRetries;
 
-    public ProxyService(Vertx vertx, long timeoutMs) {
+    public ProxyService(Vertx vertx, long timeoutMs, int maxRetries) {
         this.timeoutMs = timeoutMs;
+        this.maxRetries = maxRetries;
+        int connectTimeout = timeoutMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeoutMs;
+        int idleTimeout = timeoutMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeoutMs;
         this.webClient = WebClient.create(vertx, new WebClientOptions()
-                .setConnectTimeout((int) timeoutMs)
-                .setIdleTimeout((int) timeoutMs)
+                .setConnectTimeout(connectTimeout)
+                .setIdleTimeout(idleTimeout)
                 .setMaxPoolSize(50)
                 .setKeepAlive(true)
                 .setDecompressionSupported(true));
     }
 
     public Future<RequestLog> forward(Webhook webhook, RequestLog requestLog) {
+        return forwardWithRetry(webhook, requestLog, 0);
+    }
+
+    private Future<RequestLog> forwardWithRetry(Webhook webhook, RequestLog requestLog, int attempt) {
         if (webhook.proxyUrl() == null || webhook.proxyUrl().isBlank()) {
             return Future.succeededFuture(requestLog);
         }
@@ -64,23 +74,30 @@ public class ProxyService {
             responseFuture = proxyRequest.send();
         }
 
+        Function<Throwable, Future<RequestLog>> retryHandler = err -> {
+            long durationMs = (System.nanoTime() - startTime) / 1_000_000;
+            if (attempt < maxRetries) {
+                log.warn("Proxy attempt {}/{} failed: webhook={}, error={}, duration={}ms",
+                        attempt + 1, maxRetries, webhook.slug(), err.getMessage(), durationMs);
+                return forwardWithRetry(webhook, requestLog, attempt + 1);
+            }
+            String errorMsg = classifyError(err);
+            log.warn("Proxy failed after {} attempts: webhook={}, error={}, duration={}ms",
+                    maxRetries, webhook.slug(), errorMsg, durationMs);
+            return Future.succeededFuture(requestLog.withProxyResult(502, errorMsg, durationMs));
+        };
+
         return responseFuture
                 .map(response -> {
                     long durationMs = (System.nanoTime() - startTime) / 1_000_000;
                     String responseBody = response.bodyAsString();
                     int status = response.statusCode();
-                    log.debug("Proxy response: status={}, duration={}ms, webhook={}", status, durationMs, webhook.slug());
+                    log.debug("Proxy response: status={}, duration={}ms, webhook={}, attempt={}",
+                            status, durationMs, webhook.slug(), attempt + 1);
                     return requestLog.withProxyResult(status, responseBody, durationMs);
                 })
-                .recover(err -> {
-                    long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-                    String errorMsg = classifyError(err);
-                    log.warn("Proxy failed: webhook={}, error={}, duration={}ms", webhook.slug(), errorMsg, durationMs);
-                    return Future.succeededFuture(
-                            requestLog.withProxyResult(502, errorMsg, durationMs));
-                });
+                .recover(retryHandler);
     }
-
 
     private boolean hasHeader(java.util.Map<String, String> headers, String name) {
         if (headers == null || headers.isEmpty()) return false;
