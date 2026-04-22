@@ -16,6 +16,7 @@ import com.webhookservice.util.DatabaseManager;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
@@ -43,7 +44,7 @@ public class MainVerticle extends AbstractVerticle {
         var webhookService = new WebhookService(webhookRepository);
         var requestLogService = new RequestLogService(requestLogRepository);
         var templateService = new TemplateService();
-        proxyService = new ProxyService(vertx, config.proxyTimeoutMs());
+        proxyService = new ProxyService(vertx, config.proxyTimeoutMs(), config.proxyMaxRetries());
 
         String baseUrl = "http://localhost:" + config.serverPort();
         var webhookApiHandler = new WebhookApiHandler(webhookService, baseUrl);
@@ -86,7 +87,12 @@ public class MainVerticle extends AbstractVerticle {
                 .setCachingEnabled(true)
                 .setMaxAgeSeconds(3600));
 
-        HttpServer server = vertx.createHttpServer();
+        HttpServerOptions serverOptions = new HttpServerOptions()
+                .setCompressionSupported(true)
+                .setTcpNoDelay(true)
+                .setReusePort(true);
+
+        HttpServer server = vertx.createHttpServer(serverOptions);
         server.requestHandler(router)
                 .listen(config.serverPort())
                 .onSuccess(s -> {
