@@ -13,7 +13,9 @@ import com.webhookservice.service.RequestLogService;
 import com.webhookservice.service.TemplateService;
 import com.webhookservice.service.WebhookService;
 import com.webhookservice.util.DatabaseManager;
+import com.webhookservice.repository.RequestLogRepository;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
@@ -29,6 +31,10 @@ public class MainVerticle extends AbstractVerticle {
 
     private DatabaseManager databaseManager;
     private ProxyService proxyService;
+    private RequestLogService requestLogService;
+    private RequestLogRepository requestLogRepository;
+    private WebhookService webhookService;
+    private long cleanupTimerId;
 
     @Override
     public void start(Promise<Void> startPromise) {
@@ -42,7 +48,9 @@ public class MainVerticle extends AbstractVerticle {
         var requestLogRepository = new PgRequestLogRepository(pool);
 
         var webhookService = new WebhookService(webhookRepository);
-        var requestLogService = new RequestLogService(requestLogRepository);
+        requestLogService = new RequestLogService(requestLogRepository);
+        this.requestLogRepository = requestLogRepository;
+        this.webhookService = webhookService;
         var templateService = new TemplateService();
         proxyService = new ProxyService(vertx, config.proxyTimeoutMs(), config.proxyMaxRetries());
 
@@ -97,6 +105,7 @@ public class MainVerticle extends AbstractVerticle {
                 .listen(config.serverPort())
                 .onSuccess(s -> {
                     log.info("Server started on port {}", s.actualPort());
+                    startCleanupTimer(config);
                     startPromise.complete();
                 })
                 .onFailure(err -> {
@@ -108,8 +117,42 @@ public class MainVerticle extends AbstractVerticle {
     @Override
     public void stop(Promise<Void> stopPromise) {
         log.info("Shutting down MainVerticle");
+        if (cleanupTimerId > 0) {
+            vertx.cancelTimer(cleanupTimerId);
+            log.info("Cleanup timer cancelled");
+        }
         if (proxyService != null) proxyService.close();
         if (databaseManager != null) databaseManager.close();
         stopPromise.complete();
+    }
+
+    private void startCleanupTimer(AppConfig config) {
+        long intervalMs = config.webhookCleanupIntervalHours() * 3600L * 1000L;
+        log.info("Starting periodic cleanup timer: {} ms interval", intervalMs);
+        cleanupTimerId = vertx.setPeriodic(intervalMs, event -> {
+            log.debug("Running periodic log cleanup");
+            cleanupOldLogs();
+        });
+    }
+
+    private void cleanupOldLogs() {
+        webhookService.list(0, 1000)
+                .onSuccess(page -> {
+                    for (var webhook : page.items()) {
+                        requestLogService.listByWebhookId(webhook.id(), 0, 1)
+                                .compose(pageResult -> {
+                                    long actualCount = pageResult.total();
+                                    if (actualCount > webhook.maxLogCount()) {
+                                        log.debug("Trimming webhook {} logs: {} -> {}",
+                                                webhook.slug(), actualCount, webhook.maxLogCount());
+                                        return requestLogRepository.trimToMaxCount(webhook.id(), webhook.maxLogCount());
+                                    }
+                                    return Future.succeededFuture();
+                                })
+                                .onFailure(err -> log.warn("Cleanup failed for webhook {}: {}",
+                                        webhook.slug(), err.getMessage()));
+                    }
+                })
+                .onFailure(err -> log.warn("Failed to fetch webhooks for cleanup: {}", err.getMessage()));
     }
 }
