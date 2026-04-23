@@ -5,6 +5,7 @@ import com.webhookservice.model.WebhookFactory;
 import com.webhookservice.model.dto.CreateWebhookDto;
 import com.webhookservice.model.dto.UpdateWebhookDto;
 import com.webhookservice.repository.impl.PgWebhookRepository;
+import io.vertx.core.Future;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import org.junit.jupiter.api.AfterAll;
@@ -13,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -98,11 +101,11 @@ class PgWebhookRepositoryTest extends AbstractPgRepositoryIT {
 
     @Test
     void findAll_withPagination(VertxTestContext tc) {
-        var futures = new io.vertx.core.Future[5];
+        List<Future<?>> futures = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            futures[i] = repository.save(createTestWebhook("Webhook " + i));
+            futures.add(repository.save(createTestWebhook("Webhook " + i)));
         }
-        io.vertx.core.CompositeFuture.all(java.util.Arrays.asList(futures))
+        Future.all(futures)
                 .compose(v -> repository.findAll(0, 3))
                 .compose(page1 -> {
                     assertEquals(3, page1.items().size());

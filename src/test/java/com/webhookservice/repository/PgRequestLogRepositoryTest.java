@@ -6,7 +6,6 @@ import com.webhookservice.model.WebhookFactory;
 import com.webhookservice.model.dto.CreateWebhookDto;
 import com.webhookservice.repository.impl.PgRequestLogRepository;
 import com.webhookservice.repository.impl.PgWebhookRepository;
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -17,7 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Instant;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -126,11 +126,11 @@ class PgRequestLogRepositoryTest extends AbstractPgRepositoryIT {
 
     @Test
     void findByWebhookId_withPagination(VertxTestContext tc) {
-        Future<?>[] saves = new Future[5];
+        List<Future<?>> saves = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            saves[i] = repository.save(createTestLog(testWebhookId));
+            saves.add(repository.save(createTestLog(testWebhookId)));
         }
-        CompositeFuture.all(Arrays.asList(saves))
+        Future.all(saves)
                 .compose(v -> repository.findByWebhookId(testWebhookId, 0, 3))
                 .compose(page1 -> {
                     assertEquals(3, page1.items().size());
@@ -158,11 +158,11 @@ class PgRequestLogRepositoryTest extends AbstractPgRepositoryIT {
 
     @Test
     void deleteByWebhookId_deletesAllLogs(VertxTestContext tc) {
-        Future<?>[] saves = new Future[3];
+        List<Future<?>> saves = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
-            saves[i] = repository.save(createTestLog(testWebhookId));
+            saves.add(repository.save(createTestLog(testWebhookId)));
         }
-        CompositeFuture.all(Arrays.asList(saves))
+        Future.all(saves)
                 .compose(v -> repository.deleteByWebhookId(testWebhookId))
                 .compose(deleted -> {
                     assertEquals(3L, deleted);
@@ -185,10 +185,11 @@ class PgRequestLogRepositoryTest extends AbstractPgRepositoryIT {
 
     @Test
     void getStats_returnsCorrectCounts(VertxTestContext tc) {
-        CompositeFuture.all(
-                        repository.save(createTestLog(testWebhookId, "GET")),
-                        repository.save(createTestLog(testWebhookId, "POST")),
-                        repository.save(createTestLog(testWebhookId, "POST")))
+        List<Future<?>> saves = new ArrayList<>();
+        saves.add(repository.save(createTestLog(testWebhookId, "GET")));
+        saves.add(repository.save(createTestLog(testWebhookId, "POST")));
+        saves.add(repository.save(createTestLog(testWebhookId, "POST")));
+        Future.all(saves)
                 .compose(v -> repository.getStats(testWebhookId))
                 .onComplete(tc.succeeding(stats -> tc.verify(() -> {
                     assertEquals(3, stats.totalRequests());
@@ -214,11 +215,11 @@ class PgRequestLogRepositoryTest extends AbstractPgRepositoryIT {
 
     @Test
     void trimToMaxCount_removesOldest(VertxTestContext tc) {
-        Future<?>[] saves = new Future[5];
+        List<Future<?>> saves = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            saves[i] = repository.save(createTestLog(testWebhookId));
+            saves.add(repository.save(createTestLog(testWebhookId)));
         }
-        CompositeFuture.all(Arrays.asList(saves))
+        Future.all(saves)
                 .compose(v -> repository.trimToMaxCount(testWebhookId, 3))
                 .compose(v -> repository.findByWebhookId(testWebhookId, 0, 20))
                 .onComplete(tc.succeeding(page -> tc.verify(() -> {
