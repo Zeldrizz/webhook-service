@@ -29,42 +29,57 @@ export async function renderWebhookDetail(container, webhookId) {
     }
 
     container.innerHTML = `
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div class="app-page-head">
             <div>
-                <h2 class="mb-1">${escapeHtml(webhook.name)}</h2>
-                <div class="text-muted">Slug: <code>${escapeHtml(webhook.slug)}</code></div>
+                <div class="app-page-kicker">Webhook Profile</div>
+                <h1 class="app-page-title">${escapeHtml(webhook.name)}</h1>
+                <p class="app-page-subtitle">Delivery endpoint <code>${escapeHtml(webhook.slug)}</code></p>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="app-actions">
                 <button id="btn-copy-url" class="btn btn-outline-secondary">Copy URL</button>
-                <a href="#create?id=${webhook.id}" class="btn btn-outline-primary">Edit</a>
-                <button id="btn-toggle" class="btn ${webhook.isActive ? 'btn-outline-warning' : 'btn-outline-success'}">${webhook.isActive ? 'Disable' : 'Enable'}</button>
-                <a href="#dashboard" class="btn btn-outline-dark">Back</a>
+                <button id="btn-test-request" class="btn btn-outline-secondary">Send Test Request</button>
+                <a href="#create?id=${webhook.id}" class="btn btn-outline-secondary">Edit</a>
+                <button id="btn-toggle" class="btn ${webhook.isActive ? 'btn-app-tonal' : 'btn-primary'}">${webhook.isActive ? 'Disable' : 'Enable'}</button>
+                <button id="btn-delete" class="btn btn-app-danger">Delete</button>
+                <a href="#dashboard" class="btn btn-outline-secondary">Back</a>
             </div>
         </div>
 
         <div class="row g-3 mb-4">
             <div class="col-sm-6 col-xl-3">
-                <div class="card h-100"><div class="card-body">
-                    <div class="text-muted small">Total requests</div>
-                    <div class="fs-3 fw-semibold">${stats.totalRequests ?? 0}</div>
+                <div class="card app-stat-card h-100"><div class="card-body">
+                    <div>
+                        <div class="app-stat-label">Total requests</div>
+                        <div class="app-stat-value">${stats.totalRequests ?? 0}</div>
+                    </div>
+                    <div class="app-stat-meta">All captured deliveries for this webhook.</div>
                 </div></div>
             </div>
             <div class="col-sm-6 col-xl-3">
-                <div class="card h-100"><div class="card-body">
-                    <div class="text-muted small">Today</div>
-                    <div class="fs-3 fw-semibold">${stats.todayRequests ?? 0}</div>
+                <div class="card app-stat-card h-100"><div class="card-body">
+                    <div>
+                        <div class="app-stat-label">Today</div>
+                        <div class="app-stat-value">${stats.todayRequests ?? 0}</div>
+                    </div>
+                    <div class="app-stat-meta">Requests received since local midnight.</div>
                 </div></div>
             </div>
             <div class="col-sm-6 col-xl-3">
-                <div class="card h-100"><div class="card-body">
-                    <div class="text-muted small">Last request</div>
-                    <div class="fw-semibold">${stats.lastRequestAt ? formatDate(stats.lastRequestAt) : '-'}</div>
+                <div class="card app-stat-card h-100"><div class="card-body">
+                    <div>
+                        <div class="app-stat-label">Last request</div>
+                        <div class="app-stat-meta fw-semibold">${stats.lastRequestAt ? formatDate(stats.lastRequestAt) : '-'}</div>
+                    </div>
+                    <div class="app-stat-meta">Latest delivery touching this endpoint.</div>
                 </div></div>
             </div>
             <div class="col-sm-6 col-xl-3">
-                <div class="card h-100"><div class="card-body">
-                    <div class="text-muted small">Methods breakdown</div>
-                    <div class="fw-semibold">${renderMethodCounts(stats.methodCounts)}</div>
+                <div class="card app-stat-card h-100"><div class="card-body">
+                    <div>
+                        <div class="app-stat-label">Methods breakdown</div>
+                        <div class="app-stat-meta fw-semibold">${renderMethodCounts(stats.methodCounts)}</div>
+                    </div>
+                    <div class="app-stat-meta">Traffic mix grouped by HTTP method.</div>
                 </div></div>
             </div>
         </div>
@@ -80,7 +95,7 @@ export async function renderWebhookDetail(container, webhookId) {
                             <dt class="col-sm-4">Methods</dt>
                             <dd class="col-sm-8"><code>${escapeHtml(webhook.methods)}</code></dd>
                             <dt class="col-sm-4">Status</dt>
-                            <dd class="col-sm-8">${webhook.isActive ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</dd>
+                            <dd class="col-sm-8">${renderStatusPill(webhook.isActive)}</dd>
                             <dt class="col-sm-4">Debug</dt>
                             <dd class="col-sm-8">${webhook.debugMode ? 'Enabled' : 'Disabled'}</dd>
                             <dt class="col-sm-4">Max logs</dt>
@@ -129,7 +144,7 @@ export async function renderWebhookDetail(container, webhookId) {
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 <span>Request logs</span>
-                <button id="btn-clear-logs" class="btn btn-outline-danger btn-sm">Clear logs</button>
+                <button id="btn-clear-logs" class="btn btn-app-danger btn-sm">Clear logs</button>
             </div>
             <div class="card-body">
                 <div id="logs-container"></div>
@@ -145,14 +160,47 @@ export async function renderWebhookDetail(container, webhookId) {
             await navigator.clipboard.writeText(webhook.endpointUrl);
             showNotification('URL copied', 'success');
         } catch (error) {
-            showNotification('Не удалось скопировать URL', 'error');
+            showNotification('Failed to copy URL', 'error');
         }
+    });
+
+    document.getElementById('btn-test-request').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-test-request');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        try {
+            const response = await fetch(webhook.endpointUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ test: true, timestamp: Date.now() })
+            });
+            const data = await response.json();
+            showNotification(`Test sent! Request ID: ${data.requestId || 'unknown'}`, 'success');
+            await renderWebhookDetail(container, webhookId);
+        } catch (error) {
+            showNotification('Test request failed: ' + error.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Send Test Request';
+        }
+    });
+
+    document.getElementById('btn-delete').addEventListener('click', async () => {
+        showDeleteConfirmation(webhook.id, webhook.name, async () => {
+            try {
+                await API.deleteWebhook(webhook.id);
+                showNotification('Webhook deleted', 'success');
+                window.location.hash = '#dashboard';
+            } catch (error) {
+                showNotification('Delete failed: ' + error.message, 'error');
+            }
+        });
     });
 
     document.getElementById('btn-toggle').addEventListener('click', async () => {
         try {
             await API.toggleWebhook(webhookId);
-            showNotification('Статус обновлён', 'success');
+            showNotification('Status updated', 'success');
             await renderWebhookDetail(container, webhookId);
         } catch (error) {
             showNotification(error.message, 'error');
@@ -193,7 +241,7 @@ export async function renderWebhookDetail(container, webhookId) {
         const logsContainer = document.getElementById('logs-container');
         if (!data.items.length) {
             logsContainer.innerHTML = `
-                <div class="alert alert-light border mb-0">Пока нет ни одного запроса. Отправь запрос на endpoint выше.</div>
+                <div class="app-empty-state">No requests yet. Send a test request to populate this feed.</div>
             `;
             return;
         }
@@ -201,11 +249,11 @@ export async function renderWebhookDetail(container, webhookId) {
         const rows = data.items.map(log => `
             <tr>
                 <td>${formatDate(log.receivedAt)}</td>
-                <td><span class="badge text-bg-light border">${escapeHtml(log.method)}</span></td>
+                <td><span class="app-chip">${escapeHtml(log.method)}</span></td>
                 <td>${escapeHtml(log.sourceIp || '-')}</td>
-                <td>${log.responseStatus === null ? '<span class="text-muted">-</span>' : `<span class="badge text-bg-info">${log.responseStatus}</span>`}</td>
+                <td>${log.responseStatus === null ? '<span class="text-muted">-</span>' : `<span class="app-chip">${log.responseStatus}</span>`}</td>
                 <td>${log.proxyDurationMs === null ? '<span class="text-muted">-</span>' : `${log.proxyDurationMs} ms`}</td>
-                <td class="text-end"><a href="#request/${webhookId}/${log.id}" class="btn btn-outline-primary btn-sm">Details</a></td>
+                <td class="text-end"><a href="#request/${webhookId}/${log.id}" class="btn btn-outline-secondary btn-sm">Details</a></td>
             </tr>
         `).join('');
 
@@ -276,7 +324,7 @@ function renderMethodCounts(methodCounts) {
     if (!entries.length) {
         return '—';
     }
-    return entries.map(([method, count]) => `${escapeHtml(method)}: ${count}`).join('<br>');
+    return entries.map(([method, count]) => `<span class="app-chip">${escapeHtml(method)} · ${count}</span>`).join(' ');
 }
 
 function formatDate(value) {
@@ -287,4 +335,53 @@ function escapeHtml(value) {
     const div = document.createElement('div');
     div.textContent = value || '';
     return div.innerHTML;
+}
+
+function renderStatusPill(isActive) {
+    return `<span class="app-status-pill ${isActive ? 'is-active' : 'is-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`;
+}
+
+function showDeleteConfirmation(webhookId, webhookName, onConfirm) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade show d-block';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Webhook</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete webhook <strong>${escapeHtml(webhookName)}</strong>?</p>
+                    <p class="text-muted small mb-0">This action cannot be undone. All request logs will be permanently deleted.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="modal-confirm">Delete</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#modal-cancel').addEventListener('click', () => {
+        modal.remove();
+    });
+
+    modal.querySelector('.btn-close').addEventListener('click', () => {
+        modal.remove();
+    });
+
+    modal.querySelector('#modal-confirm').addEventListener('click', () => {
+        modal.remove();
+        onConfirm();
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
 }
