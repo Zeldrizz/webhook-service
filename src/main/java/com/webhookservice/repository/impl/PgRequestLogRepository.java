@@ -5,11 +5,9 @@ import com.webhookservice.model.dto.Page;
 import com.webhookservice.model.dto.StatsResponse;
 import com.webhookservice.repository.RequestLogRepository;
 import com.webhookservice.util.JsonUtil;
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 
 import java.time.Instant;
@@ -162,7 +160,7 @@ public class PgRequestLogRepository implements RequestLogRepository {
                     return m;
                 });
 
-        return CompositeFuture.all(totalF, todayF, lastF, methodsF)
+        return Future.all(List.of(totalF, todayF, lastF, methodsF))
                 .map(cf -> new StatsResponse(
                         totalF.result(),
                         todayF.result(),
