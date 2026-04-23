@@ -2,7 +2,6 @@ package com.webhookservice.repository;
 
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import org.junit.jupiter.api.Assumptions;
@@ -25,11 +24,13 @@ public abstract class AbstractPgRepositoryIT {
         Assumptions.assumeTrue(dockerAvailable,
                 "Skipping repository integration tests: Docker is not available");
 
+        @SuppressWarnings("resource")
+        PostgreSQLContainer<?> container = new PostgreSQLContainer<>("postgres:16-alpine")
+                .withDatabaseName("webhooks")
+                .withUsername("test_user")
+                .withPassword("test_pass");
         if (postgres == null) {
-            postgres = new PostgreSQLContainer<>("postgres:16-alpine")
-                    .withDatabaseName("webhooks")
-                    .withUsername("test_user")
-                    .withPassword("test_pass");
+            postgres = container;
             postgres.start();
         }
 
@@ -42,7 +43,7 @@ public abstract class AbstractPgRepositoryIT {
                     .setUser(postgres.getUsername())
                     .setPassword(postgres.getPassword())
                     .setCachePreparedStatements(true);
-            pool = PgPool.pool(vertx, connect, new PoolOptions().setMaxSize(4));
+            pool = Pool.pool(vertx, connect, new PoolOptions().setMaxSize(4));
         }
     }
 
