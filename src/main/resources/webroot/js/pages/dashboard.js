@@ -1,5 +1,5 @@
 /**
- * Dashboard page - список всех вебхуков.
+ * Dashboard page - all webhooks list.
  */
 
 import API from '../api.js';
@@ -13,14 +13,15 @@ export async function renderDashboard(container) {
     let statusFilter = 'all';
 
     container.innerHTML = `
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div class="app-page-head">
             <div>
-                <h2 class="mb-1">Webhook Dashboard</h2>
-                <p class="text-muted mb-0">Создание, включение, отключение и просмотр динамических вебхуков.</p>
+                <div class="app-page-kicker">Operations</div>
+                <h1 class="app-page-title">Webhook Dashboard</h1>
+                <p class="app-page-subtitle">Manage endpoints, keep delivery flows readable, and review activity without visual noise.</p>
             </div>
-            <div class="d-flex gap-2">
-                <a href="#create" class="btn btn-primary">Создать вебхук</a>
-                <a href="/swagger" class="btn btn-outline-secondary" target="_blank" rel="noreferrer">Swagger</a>
+            <div class="app-actions">
+                <a href="#create" class="btn btn-primary">New Webhook</a>
+                <a href="/swagger" class="btn btn-outline-secondary" target="_blank" rel="noreferrer">API Docs</a>
             </div>
         </div>
 
@@ -28,15 +29,15 @@ export async function renderDashboard(container) {
             <div class="card-body">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-8">
-                        <label class="form-label">Поиск</label>
-                        <input id="dashboard-search" type="search" class="form-control" placeholder="По имени, slug или описанию">
+                        <label class="form-label">Search</label>
+                        <input id="dashboard-search" type="search" class="form-control" placeholder="Search by name, slug or description">
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Статус</label>
+                        <label class="form-label">Status</label>
                         <select id="dashboard-status" class="form-select">
-                            <option value="all">Все</option>
-                            <option value="active">Активные</option>
-                            <option value="inactive">Неактивные</option>
+                            <option value="all">All</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
                         </select>
                     </div>
                 </div>
@@ -96,7 +97,7 @@ export async function renderDashboard(container) {
         const items = filterItems(lastResponse.items);
         if (!items.length) {
             tableContainer.innerHTML = `
-                <div class="alert alert-light border mb-0">Подходящие вебхуки не найдены.</div>
+                <div class="app-empty-state">No webhooks found matching your criteria.</div>
             `;
             return;
         }
@@ -108,15 +109,15 @@ export async function renderDashboard(container) {
                     <div class="text-muted small">${escapeHtml(webhook.slug)}</div>
                 </td>
                 <td><code>${escapeHtml(webhook.methods)}</code></td>
-                <td>${webhook.isActive ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
+                <td>${renderStatusPill(webhook.isActive)}</td>
                 <td><code class="app-code-inline">${escapeHtml(webhook.endpointUrl)}</code></td>
                 <td>${formatDate(webhook.createdAt)}</td>
                 <td>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <a class="btn btn-outline-primary" href="#webhook/${webhook.id}">Открыть</a>
-                        <a class="btn btn-outline-secondary" href="#create?id=${webhook.id}">Редактировать</a>
-                        <button class="btn btn-outline-warning" data-action="toggle" data-id="${webhook.id}">${webhook.isActive ? 'Disable' : 'Enable'}</button>
-                        <button class="btn btn-outline-danger" data-action="delete" data-id="${webhook.id}">Delete</button>
+                    <div class="d-flex flex-wrap gap-2 justify-content-end">
+                        <a class="btn btn-outline-secondary btn-sm" href="#webhook/${webhook.id}">View</a>
+                        <a class="btn btn-outline-secondary btn-sm" href="#create?id=${webhook.id}">Edit</a>
+                        <button class="btn ${webhook.isActive ? 'btn-app-tonal' : 'btn-primary'} btn-sm" data-action="toggle" data-id="${webhook.id}">${webhook.isActive ? 'Disable' : 'Enable'}</button>
+                        <button class="btn btn-app-danger btn-sm" data-action="delete" data-id="${webhook.id}">Delete</button>
                     </div>
                 </td>
             </tr>
@@ -144,7 +145,7 @@ export async function renderDashboard(container) {
             button.addEventListener('click', async () => {
                 try {
                     await API.toggleWebhook(button.dataset.id);
-                    showNotification('Статус вебхука обновлён', 'success');
+                    showNotification('Webhook status updated', 'success');
                     await loadPage(currentPage);
                 } catch (error) {
                     showNotification(error.message, 'error');
@@ -154,12 +155,12 @@ export async function renderDashboard(container) {
 
         tableContainer.querySelectorAll('[data-action="delete"]').forEach(button => {
             button.addEventListener('click', async () => {
-                if (!window.confirm('Удалить этот вебхук?')) {
+                if (!window.confirm('Delete this webhook?')) {
                     return;
                 }
                 try {
                     await API.deleteWebhook(button.dataset.id);
-                    showNotification('Вебхук удалён', 'success');
+                    showNotification('Webhook deleted', 'success');
                     const totalAfterDelete = Math.max(0, (lastResponse.total || 1) - 1);
                     const maxPage = Math.max(0, Math.ceil(totalAfterDelete / pageSize) - 1);
                     await loadPage(Math.min(currentPage, maxPage));
@@ -239,4 +240,8 @@ function escapeHtml(value) {
     const div = document.createElement('div');
     div.textContent = value || '';
     return div.innerHTML;
+}
+
+function renderStatusPill(isActive) {
+    return `<span class="app-status-pill ${isActive ? 'is-active' : 'is-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`;
 }

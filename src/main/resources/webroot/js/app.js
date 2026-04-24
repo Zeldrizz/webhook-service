@@ -54,8 +54,8 @@ async function route() {
 
     app.innerHTML = `
         <div class="alert alert-warning">
-            <h4 class="alert-heading">Страница не найдена</h4>
-            <p class="mb-0">Проверь hash-маршрут или вернись на <a href="#dashboard" class="alert-link">dashboard</a>.</p>
+            <h4 class="alert-heading">Page Not Found</h4>
+            <p class="mb-0">Check the hash route or return to the <a href="#dashboard" class="alert-link">dashboard</a>.</p>
         </div>
     `;
 }
@@ -76,7 +76,7 @@ function renderFatalError(error) {
     console.error(error);
     app.innerHTML = `
         <div class="alert alert-danger">
-            <h4 class="alert-heading">Ошибка загрузки интерфейса</h4>
+            <h4 class="alert-heading">Interface Load Error</h4>
             <pre class="mb-0 app-pre-wrap">${escapeHtml(error?.message || String(error))}</pre>
         </div>
     `;

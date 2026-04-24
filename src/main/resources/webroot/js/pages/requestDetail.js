@@ -15,19 +15,22 @@ export async function renderRequestDetail(container, webhookId, requestId) {
         const requestLog = await API.getRequest(webhookId, requestId);
 
         container.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
+            <div class="app-page-head">
                 <div>
-                    <h2 class="mb-1">Request Detail</h2>
-                    <div class="text-muted">Request ID: <code>${escapeHtml(requestLog.id)}</code></div>
+                    <div class="app-page-kicker">Request Trace</div>
+                    <h1 class="app-page-title">Request Detail</h1>
+                    <p class="app-page-subtitle">Request ID <code>${escapeHtml(requestLog.id)}</code></p>
                 </div>
-                <a href="#webhook/${webhookId}" class="btn btn-outline-secondary">Back to Webhook</a>
+                <div class="app-actions">
+                    <a href="#webhook/${webhookId}" class="btn btn-outline-secondary">Back to Webhook</a>
+                </div>
             </div>
 
             <div class="card mb-4">
                 <div class="card-header">Request info</div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-4"><strong>Method</strong><div>${escapeHtml(requestLog.method)}</div></div>
+                        <div class="col-md-4"><strong>Method</strong><div><span class="app-chip">${escapeHtml(requestLog.method)}</span></div></div>
                         <div class="col-md-8"><strong>URL</strong><div><code class="app-code-inline">${escapeHtml(requestLog.url)}</code></div></div>
                         <div class="col-md-4"><strong>Received at</strong><div>${formatDate(requestLog.receivedAt)}</div></div>
                         <div class="col-md-4"><strong>Source IP</strong><div>${escapeHtml(requestLog.sourceIp || '-')}</div></div>
@@ -60,7 +63,7 @@ export async function renderRequestDetail(container, webhookId, requestId) {
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <span>Proxy response</span>
-                        <span class="badge text-bg-info">${requestLog.responseStatus ?? '—'} ${requestLog.proxyDurationMs !== null ? `· ${requestLog.proxyDurationMs} ms` : ''}</span>
+                        <span class="app-chip">${requestLog.responseStatus ?? '—'} ${requestLog.proxyDurationMs !== null ? `· ${requestLog.proxyDurationMs} ms` : ''}</span>
                     </div>
                     <div class="card-body"><div id="section-proxy"></div></div>
                 </div>
@@ -86,7 +89,7 @@ function renderMapSection(elementId, value) {
     const entries = Object.entries(value || {});
 
     if (!entries.length) {
-        el.innerHTML = '<div class="text-muted">Empty</div>';
+        el.innerHTML = '<div class="app-empty-state">Empty</div>';
         return;
     }
 
@@ -113,7 +116,7 @@ function renderContent(elementId, rawValue) {
     }
 
     if (!rawValue) {
-        el.innerHTML = '<div class="text-muted">Empty</div>';
+        el.innerHTML = '<div class="app-empty-state">Empty</div>';
         return;
     }
 

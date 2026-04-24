@@ -31,19 +31,22 @@ export async function renderWebhookCreate(container, webhookId = null) {
     const methods = new Set((existing?.methods || 'GET,POST').split(',').map(v => v.trim()).filter(Boolean));
 
     container.innerHTML = `
-        <div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
+        <div class="app-page-head">
             <div>
-                <h2 class="mb-1">${isEdit ? 'Edit Webhook' : 'Create Webhook'}</h2>
-                <p class="text-muted mb-0">Настройка endpoint, proxy и шаблонов запроса/ответа.</p>
+                <div class="app-page-kicker">Builder</div>
+                <h1 class="app-page-title">${isEdit ? 'Edit Webhook' : 'Create Webhook'}</h1>
+                <p class="app-page-subtitle">Configure the endpoint, proxy behavior and template output in one place.</p>
             </div>
-            <a href="${isEdit ? `#webhook/${webhookId}` : '#dashboard'}" class="btn btn-outline-secondary">Назад</a>
+            <div class="app-actions">
+                <a href="${isEdit ? `#webhook/${webhookId}` : '#dashboard'}" class="btn btn-outline-secondary">Back</a>
+            </div>
         </div>
 
         <form id="webhook-form" class="card">
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-8">
-                        <label class="form-label">Название *</label>
+                        <label class="form-label">Name *</label>
                         <input id="field-name" type="text" class="form-control" required maxlength="255" value="${escapeAttr(existing?.name || '')}">
                     </div>
                     <div class="col-md-4">
@@ -51,11 +54,11 @@ export async function renderWebhookCreate(container, webhookId = null) {
                         <input id="field-slug-preview" type="text" class="form-control" readonly value="${escapeAttr(existing?.slug || '')}">
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Описание</label>
+                        <label class="form-label">Description</label>
                         <textarea id="field-description" class="form-control" rows="3" maxlength="2000">${escapeHtml(existing?.description || '')}</textarea>
                     </div>
                     <div class="col-12">
-                        <label class="form-label d-block">HTTP методы</label>
+                        <label class="form-label d-block">HTTP Methods</label>
                         <div class="d-flex flex-wrap gap-3">
                             ${SUPPORTED_METHODS.map(method => `
                                 <div class="form-check">
@@ -76,12 +79,12 @@ export async function renderWebhookCreate(container, webhookId = null) {
                         </div>
                     </div>
                     <div class="col-md-4 d-flex align-items-end justify-content-md-end">
-                        ${existing?.endpointUrl ? `<a href="#webhook/${existing.id}" class="btn btn-outline-primary">Открыть детали</a>` : ''}
+                        ${existing?.endpointUrl ? `<a href="#webhook/${existing.id}" class="btn btn-outline-secondary">View Details</a>` : ''}
                     </div>
                 </div>
             </div>
 
-            <div class="card-header">Proxy configuration</div>
+            <div class="card-header">Proxy Configuration</div>
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-12">
@@ -89,7 +92,7 @@ export async function renderWebhookCreate(container, webhookId = null) {
                         <input id="field-proxy-url" type="url" class="form-control" placeholder="https://example.com/endpoint" value="${escapeAttr(existing?.proxyUrl || '')}">
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Proxy headers (JSON object)</label>
+                        <label class="form-label">Proxy Headers (JSON object)</label>
                         <textarea id="field-proxy-headers" class="form-control app-code-input" rows="6" placeholder='{"Authorization":"Bearer ..."}'>${escapeHtml(existing?.proxyHeaders ? JSON.stringify(existing.proxyHeaders, null, 2) : '')}</textarea>
                     </div>
                 </div>
@@ -99,33 +102,33 @@ export async function renderWebhookCreate(container, webhookId = null) {
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-lg-6">
-                        <label class="form-label">Request template</label>
+                        <label class="form-label">Request Template</label>
                         <textarea id="field-request-template" class="form-control app-code-input" rows="10" placeholder='{"event":"{{body.event}}"}'>${escapeHtml(existing?.requestTemplate || '')}</textarea>
-                        <div class="form-text">Поддерживаются placeholders вида <code>{{body.field}}</code> и <code>${'{body.field}'}</code>.</div>
+                        <div class="form-text">Supports placeholders like <code>{{body.field}}</code> and <code>${'{body.field}'}</code>.</div>
                     </div>
                     <div class="col-lg-6">
-                        <label class="form-label">Response template</label>
+                        <label class="form-label">Response Template</label>
                         <textarea id="field-response-template" class="form-control app-code-input" rows="10" placeholder='{"ok":true,"status":"{{responseStatus}}"}'>${escapeHtml(existing?.responseTemplate || '')}</textarea>
-                        <div class="form-text">Шаблон формируется после proxy-вызова. Доступны <code>{{proxy.status}}</code>, <code>{{proxy.response}}</code>.</div>
+                        <div class="form-text">Template is rendered after proxy call. Available: <code>{{proxy.status}}</code>, <code>{{proxy.response}}</code>.</div>
                     </div>
                 </div>
                 <div class="row g-3 mt-1">
                     <div class="col-lg-6">
-                        <button id="preview-request-template" type="button" class="btn btn-outline-secondary btn-sm">Preview request template</button>
+                        <button id="preview-request-template" type="button" class="btn btn-outline-secondary btn-sm">Preview Request Template</button>
                     </div>
                     <div class="col-lg-6">
-                        <button id="preview-response-template" type="button" class="btn btn-outline-secondary btn-sm">Preview response template</button>
+                        <button id="preview-response-template" type="button" class="btn btn-outline-secondary btn-sm">Preview Response Template</button>
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Template preview result</label>
-                        <pre id="template-preview-result" class="app-preview-box mb-0">Нажми Preview, чтобы увидеть результат шаблона.</pre>
+                        <label class="form-label">Template Preview</label>
+                        <pre id="template-preview-result" class="app-preview-box mb-0">Click Preview to see the template result.</pre>
                     </div>
                 </div>
             </div>
 
             <div class="card-body border-top d-flex gap-2 justify-content-end">
-                <button type="submit" class="btn btn-primary">${isEdit ? 'Сохранить' : 'Создать'}</button>
-                <a href="${isEdit ? `#webhook/${webhookId}` : '#dashboard'}" class="btn btn-outline-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">${isEdit ? 'Save' : 'Create'}</button>
+                <a href="${isEdit ? `#webhook/${webhookId}` : '#dashboard'}" class="btn btn-outline-secondary">Cancel</a>
             </div>
         </form>
     `;
@@ -164,7 +167,7 @@ export async function renderWebhookCreate(container, webhookId = null) {
             const webhook = isEdit
                     ? await API.updateWebhook(webhookId, payload)
                     : await API.createWebhook(payload);
-            showNotification(isEdit ? 'Webhook обновлён' : 'Webhook создан', 'success');
+            showNotification(isEdit ? 'Webhook updated' : 'Webhook created', 'success');
             window.location.hash = `#webhook/${webhook.id}`;
         } catch (error) {
             showNotification(error.message, 'error');
@@ -202,13 +205,13 @@ export async function renderWebhookCreate(container, webhookId = null) {
         const proxyHeadersRaw = document.getElementById('field-proxy-headers').value.trim();
 
         if (!name) {
-            throw new Error('Название вебхука обязательно');
+            throw new Error('Webhook name is required');
         }
         if (!methods.length) {
-            throw new Error('Нужно выбрать хотя бы один HTTP метод');
+            throw new Error('At least one HTTP method is required');
         }
         if (!Number.isInteger(maxLogCount) || maxLogCount < 1 || maxLogCount > 10000) {
-            throw new Error('maxLogCount должен быть целым числом от 1 до 10000');
+            throw new Error('maxLogCount must be an integer from 1 to 10000');
         }
 
         return {
@@ -238,11 +241,11 @@ function parseProxyHeaders(raw) {
     try {
         parsed = JSON.parse(raw);
     } catch (error) {
-        throw new Error('Proxy headers должны быть валидным JSON-объектом');
+        throw new Error('Proxy headers must be a valid JSON object');
     }
 
     if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('Proxy headers должны быть JSON-объектом');
+        throw new Error('Proxy headers must be a JSON object');
     }
 
     return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)]));
