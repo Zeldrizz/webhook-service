@@ -1,7 +1,3 @@
-/**
- * Webhook creation/edit form.
- */
-
 import API from '../api.js';
 import { showNotification } from '../components/notification.js';
 
@@ -11,124 +7,133 @@ export async function renderWebhookCreate(container, webhookId = null) {
     const isEdit = Boolean(webhookId);
     let existing = null;
 
-    container.innerHTML = `
-        <div class="text-center py-5">
-            <div class="spinner-border"></div>
-        </div>
-    `;
+    renderInitialLoading(container, isEdit);
 
     try {
         if (isEdit) {
             existing = await API.getWebhook(webhookId);
         }
     } catch (error) {
-        container.innerHTML = `
-            <div class="alert alert-danger">${escapeHtml(error.message)}</div>
-        `;
+        renderLoadError(container, error);
         return;
     }
 
     const methods = new Set((existing?.methods || 'GET,POST').split(',').map(v => v.trim()).filter(Boolean));
 
     container.innerHTML = `
-        <div class="app-page-head">
+        <section class="app-page-head">
             <div>
                 <div class="app-page-kicker">Builder</div>
                 <h1 class="app-page-title">${isEdit ? 'Edit Webhook' : 'Create Webhook'}</h1>
-                <p class="app-page-subtitle">Configure the endpoint, proxy behavior and template output in one place.</p>
+                <p class="app-page-subtitle">
+                    Configure the endpoint, proxy behavior and template output in one place.
+                </p>
             </div>
             <div class="app-actions">
-                <a href="${isEdit ? `#webhook/${webhookId}` : '#dashboard'}" class="btn btn-outline-secondary">Back</a>
+                <a class="btn btn-app-ghost" href="#dashboard">Back</a>
             </div>
-        </div>
+        </section>
 
-        <form id="webhook-form" class="card">
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-8">
-                        <label class="form-label">Name *</label>
-                        <input id="field-name" type="text" class="form-control" required maxlength="255" value="${escapeAttr(existing?.name || '')}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Slug preview</label>
-                        <input id="field-slug-preview" type="text" class="form-control" readonly value="${escapeAttr(existing?.slug || '')}">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Description</label>
-                        <textarea id="field-description" class="form-control" rows="3" maxlength="2000">${escapeHtml(existing?.description || '')}</textarea>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label d-block">HTTP Methods</label>
-                        <div class="d-flex flex-wrap gap-3">
-                            ${SUPPORTED_METHODS.map(method => `
-                                <div class="form-check">
-                                    <input class="form-check-input method-checkbox" type="checkbox" value="${method}" id="method-${method}" ${methods.has(method) ? 'checked' : ''}>
-                                    <label class="form-check-label" for="method-${method}">${method}</label>
+        <div id="form-error" aria-live="polite"></div>
+
+        <form id="webhook-form" class="row g-4" novalidate>
+            <div class="col-lg-7">
+                <div class="card mb-4">
+                    <div class="card-header">General</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="field-name">Name *</label>
+                            <input class="form-control" id="field-name" type="text" maxlength="255" required value="${escapeAttr(existing?.name || '')}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="field-slug-preview">Slug preview</label>
+                            <input class="form-control" id="field-slug-preview" type="text" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="field-description">Description</label>
+                            <textarea class="form-control" id="field-description" rows="3">${escapeHtml(existing?.description || '')}</textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label d-block">HTTP Methods</label>
+                            <div class="d-flex flex-wrap gap-3">
+                                ${SUPPORTED_METHODS.map(method => `
+                                    <div class="form-check">
+                                        <input class="form-check-input method-checkbox" type="checkbox" id="method-${method}" value="${method}" ${methods.has(method) ? 'checked' : ''}>
+                                        <label class="form-check-label" for="method-${method}">${method}</label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-6">
+                                <label class="form-label" for="field-max-log-count">Max log count</label>
+                                <input class="form-control" id="field-max-log-count" type="number" min="1" max="10000" value="${escapeAttr(existing?.maxLogCount || 100)}">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" id="field-debug-mode" type="checkbox" ${existing?.debugMode === false ? '' : 'checked'}>
+                                    <label class="form-check-label" for="field-debug-mode">Debug mode</label>
                                 </div>
-                            `).join('')}
+                            </div>
+                        </div>
+                        ${existing?.endpointUrl ? `
+                            <div class="mt-3">
+                                <a class="btn btn-sm btn-app-ghost" href="#webhook/${escapeAttr(existing.id)}">View Details</a>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">Proxy Configuration</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="field-proxy-url">Proxy URL</label>
+                            <input class="form-control" id="field-proxy-url" type="url" placeholder="https://example.com/events" value="${escapeAttr(existing?.proxyUrl || '')}">
+                        </div>
+                        <div>
+                            <label class="form-label" for="field-proxy-headers">Proxy Headers (JSON object)</label>
+                            <textarea class="form-control app-code-input" id="field-proxy-headers" rows="5" spellcheck="false">${escapeHtml(existing?.proxyHeaders ? JSON.stringify(existing.proxyHeaders, null, 2) : '')}</textarea>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Max log count</label>
-                        <input id="field-max-log-count" type="number" class="form-control" min="1" max="10000" value="${escapeAttr(String(existing?.maxLogCount || 100))}">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="field-debug-mode" ${existing?.debugMode ?? true ? 'checked' : ''}>
-                            <label class="form-check-label" for="field-debug-mode">Debug mode</label>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card mb-4">
+                    <div class="card-header">Templates</div>
+                    <div class="card-body">
+                        <div class="alert alert-light mb-3">
+                            <div class="fw-semibold mb-1">Template syntax</div>
+                            <div class="small">
+                                Variables: <code>{{body.field}}</code>, <code>\${body.field}</code><br>
+                                Conditions: <code>{{#if body.urgent}}...{{/if}}</code><br>
+                                Loops: <code>{{#each body.items}}Name: {{name}}{{/each}}</code>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end justify-content-md-end">
-                        ${existing?.endpointUrl ? `<a href="#webhook/${existing.id}" class="btn btn-outline-secondary">View Details</a>` : ''}
+                        <div class="mb-3">
+                            <label class="form-label" for="field-request-template">Request Template</label>
+                            <textarea class="form-control app-code-input" id="field-request-template" rows="9" spellcheck="false">${escapeHtml(existing?.requestTemplate || '')}</textarea>
+                            <div class="form-text">Rendered before proxy call. Available namespaces: <code>request</code>, <code>body</code>, <code>headers</code>, <code>queryParams</code>, <code>webhook</code>.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="field-response-template">Response Template</label>
+                            <textarea class="form-control app-code-input" id="field-response-template" rows="7" spellcheck="false">${escapeHtml(existing?.responseTemplate || '')}</textarea>
+                            <div class="form-text">Rendered after proxy call. Available: <code>{{proxy.status}}</code>, <code>{{proxy.response}}</code>, <code>{{proxy.durationMs}}</code>.</div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-request-template">Preview Request Template</button>
+                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-response-template">Preview Response Template</button>
+                        </div>
+                        <label class="form-label" for="template-preview-result">Template Preview</label>
+                        <pre id="template-preview-result" class="app-preview-box mb-0" tabindex="0">Click Preview to see the template result.</pre>
                     </div>
                 </div>
-            </div>
 
-            <div class="card-header">Proxy Configuration</div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Proxy URL</label>
-                        <input id="field-proxy-url" type="url" class="form-control" placeholder="https://example.com/endpoint" value="${escapeAttr(existing?.proxyUrl || '')}">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Proxy Headers (JSON object)</label>
-                        <textarea id="field-proxy-headers" class="form-control app-code-input" rows="6" placeholder='{"Authorization":"Bearer ..."}'>${escapeHtml(existing?.proxyHeaders ? JSON.stringify(existing.proxyHeaders, null, 2) : '')}</textarea>
-                    </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-app-primary" type="submit" id="submit-webhook">${isEdit ? 'Save' : 'Create'}</button>
+                    <a class="btn btn-app-ghost" href="#dashboard">Cancel</a>
                 </div>
-            </div>
-
-            <div class="card-header">Templates</div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-lg-6">
-                        <label class="form-label">Request Template</label>
-                        <textarea id="field-request-template" class="form-control app-code-input" rows="10" placeholder='{"event":"{{body.event}}"}'>${escapeHtml(existing?.requestTemplate || '')}</textarea>
-                        <div class="form-text">Supports placeholders like <code>{{body.field}}</code> and <code>${'{body.field}'}</code>.</div>
-                    </div>
-                    <div class="col-lg-6">
-                        <label class="form-label">Response Template</label>
-                        <textarea id="field-response-template" class="form-control app-code-input" rows="10" placeholder='{"ok":true,"status":"{{responseStatus}}"}'>${escapeHtml(existing?.responseTemplate || '')}</textarea>
-                        <div class="form-text">Template is rendered after proxy call. Available: <code>{{proxy.status}}</code>, <code>{{proxy.response}}</code>.</div>
-                    </div>
-                </div>
-                <div class="row g-3 mt-1">
-                    <div class="col-lg-6">
-                        <button id="preview-request-template" type="button" class="btn btn-outline-secondary btn-sm">Preview Request Template</button>
-                    </div>
-                    <div class="col-lg-6">
-                        <button id="preview-response-template" type="button" class="btn btn-outline-secondary btn-sm">Preview Response Template</button>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Template Preview</label>
-                        <pre id="template-preview-result" class="app-preview-box mb-0">Click Preview to see the template result.</pre>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card-body border-top d-flex gap-2 justify-content-end">
-                <button type="submit" class="btn btn-primary">${isEdit ? 'Save' : 'Create'}</button>
-                <a href="${isEdit ? `#webhook/${webhookId}` : '#dashboard'}" class="btn btn-outline-secondary">Cancel</a>
             </div>
         </form>
     `;
@@ -141,56 +146,60 @@ export async function renderWebhookCreate(container, webhookId = null) {
     updateSlugPreview();
     nameInput.addEventListener('input', updateSlugPreview);
 
-    document.getElementById('preview-request-template').addEventListener('click', async () => {
-        await previewTemplate('request');
+    document.getElementById('preview-request-template').addEventListener('click', async event => {
+        await previewTemplate('request', event.currentTarget);
     });
 
-    document.getElementById('preview-response-template').addEventListener('click', async () => {
-        await previewTemplate('response');
+    document.getElementById('preview-response-template').addEventListener('click', async event => {
+        await previewTemplate('response', event.currentTarget);
     });
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
+        clearInlineError();
 
         let payload;
         try {
             payload = collectPayload();
         } catch (error) {
-            showNotification(error.message, 'error');
+            showInlineError(error);
+            showNotification(error, 'error');
             return;
         }
 
-        const submitButton = form.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
-
-        try {
-            const webhook = isEdit
-                    ? await API.updateWebhook(webhookId, payload)
-                    : await API.createWebhook(payload);
-            showNotification(isEdit ? 'Webhook updated' : 'Webhook created', 'success');
-            window.location.hash = `#webhook/${webhook.id}`;
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            submitButton.disabled = false;
-        }
+        const submitButton = document.getElementById('submit-webhook');
+        await withButtonLoading(submitButton, isEdit ? 'Saving...' : 'Creating...', async () => {
+            setFormReadonly(form, true);
+            try {
+                const webhook = isEdit ? await API.updateWebhook(webhookId, payload) : await API.createWebhook(payload);
+                showNotification(isEdit ? 'Webhook updated' : 'Webhook created', 'success');
+                window.location.hash = `#webhook/${webhook.id}`;
+            } catch (error) {
+                showInlineError(error);
+                showNotification(error, 'error');
+            } finally {
+                setFormReadonly(form, false);
+            }
+        });
     });
 
-    async function previewTemplate(kind) {
-        try {
-            const payload = collectPayload();
-            const sampleData = buildSampleData(payload, existing);
-            const template = kind === 'request'
-                    ? payload.requestTemplate || '{"message":"request template is empty"}'
-                    : payload.responseTemplate || '{"message":"response template is empty"}';
-            const result = await API.previewTemplate(template, sampleData);
-            previewBox.textContent = typeof result?.result === 'string'
-                    ? result.result
-                    : JSON.stringify(result, null, 2);
-        } catch (error) {
-            previewBox.textContent = error.message;
-            showNotification(error.message, 'error');
-        }
+    async function previewTemplate(kind, button) {
+        clearInlineError();
+        await withButtonLoading(button, 'Rendering...', async () => {
+            try {
+                const payload = collectPayload();
+                const sampleData = buildSampleData(payload, existing);
+                const template = kind === 'request'
+                    ? payload.requestTemplate || defaultRequestTemplate()
+                    : payload.responseTemplate || defaultResponseTemplate();
+                const result = await API.previewTemplate(template, sampleData);
+                previewBox.textContent = formatPreviewResult(result);
+            } catch (error) {
+                previewBox.textContent = error?.message || String(error);
+                showInlineError(error);
+                showNotification(error, 'error');
+            }
+        });
     }
 
     function collectPayload() {
@@ -232,6 +241,91 @@ export async function renderWebhookCreate(container, webhookId = null) {
     }
 }
 
+function renderInitialLoading(container, isEdit) {
+    container.innerHTML = `
+        <section class="app-page-head">
+            <div>
+                <div class="app-page-kicker">Builder</div>
+                <h1 class="app-page-title">${isEdit ? 'Edit Webhook' : 'Create Webhook'}</h1>
+                <p class="app-page-subtitle">${isEdit ? 'Loading webhook configuration...' : 'Preparing form...'}</p>
+            </div>
+        </section>
+        <div class="card">
+            <div class="card-body d-flex align-items-center gap-3" role="status" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>${isEdit ? 'Loading webhook...' : 'Loading form...'}</span>
+            </div>
+        </div>
+    `;
+}
+
+function renderLoadError(container, error) {
+    container.innerHTML = `
+        <section class="app-page-head">
+            <div>
+                <div class="app-page-kicker">Builder</div>
+                <h1 class="app-page-title">Webhook form</h1>
+                <p class="app-page-subtitle">The form could not be loaded.</p>
+            </div>
+            <div class="app-actions">
+                <a class="btn btn-app-ghost" href="#dashboard">Back</a>
+            </div>
+        </section>
+        <div class="alert alert-danger">
+            <div class="fw-semibold">Failed to load webhook</div>
+            <div>${escapeHtml(error?.message || String(error))}</div>
+        </div>
+    `;
+}
+
+function showInlineError(error) {
+    const target = document.getElementById('form-error');
+    if (!target) {
+        return;
+    }
+    target.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+            <div class="fw-semibold">Action failed</div>
+            <div>${escapeHtml(error?.message || String(error))}</div>
+        </div>
+    `;
+}
+
+function clearInlineError() {
+    const target = document.getElementById('form-error');
+    if (target) {
+        target.innerHTML = '';
+    }
+}
+
+async function withButtonLoading(button, label, task) {
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${escapeHtml(label)}`;
+    try {
+        await task();
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+    }
+}
+
+function setFormReadonly(form, readonly) {
+    form.querySelectorAll('input, textarea, select, button').forEach(control => {
+        if (control.id !== 'submit-webhook') {
+            control.disabled = readonly;
+        }
+    });
+}
+
+function formatPreviewResult(result) {
+    const value = Object.prototype.hasOwnProperty.call(result || {}, 'result') ? result.result : result;
+    if (typeof value === 'string') {
+        return value;
+    }
+    return JSON.stringify(value, null, 2);
+}
+
 function parseProxyHeaders(raw) {
     if (!raw) {
         return {};
@@ -251,7 +345,37 @@ function parseProxyHeaders(raw) {
     return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)]));
 }
 
+function defaultRequestTemplate() {
+    return `{
+  "event": "{{body.event}}",
+  "repository": "{{body.repository.name}}",
+  "urgentMessage": "{{#if body.urgent}}URGENT: {{body.message}}{{/if}}",
+  "items": "{{#each body.items}}{{name}}={{quantity}};{{/each}}"
+}`;
+}
+
+function defaultResponseTemplate() {
+    return `{
+  "ok": "{{#if proxy.status}}true{{/if}}",
+  "status": "{{proxy.status}}",
+  "traceId": "{{proxy.response.traceId}}"
+}`;
+}
+
 function buildSampleData(payload, existing) {
+    const body = {
+        event: 'push',
+        urgent: true,
+        message: 'Production deploy requested',
+        repository: { name: 'demo-repository' },
+        user: { id: 42, name: 'Ksenia' },
+        items: [
+            { name: 'build', quantity: 1, passed: true },
+            { name: 'test', quantity: 3, passed: true },
+            { name: 'deploy', quantity: 1, passed: false }
+        ]
+    };
+
     return {
         webhook: {
             id: existing?.id || '00000000-0000-0000-0000-000000000000',
@@ -267,60 +391,26 @@ function buildSampleData(payload, existing) {
             id: '11111111-1111-1111-1111-111111111111',
             method: 'POST',
             url: '/webhook/sample',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Source': 'demo'
-            },
-            queryParams: {
-                source: 'preview'
-            },
-            body: {
-                event: 'push',
-                repository: {
-                    name: 'demo-repository'
-                },
-                user: {
-                    id: 42,
-                    name: 'Ksenia'
-                }
-            },
-            rawBody: JSON.stringify({ event: 'push', repository: { name: 'demo-repository' } }),
+            headers: { 'Content-Type': 'application/json', 'X-Source': 'demo' },
+            queryParams: { source: 'preview' },
+            body,
+            rawBody: JSON.stringify(body),
             contentType: 'application/json',
             sourceIp: '127.0.0.1',
             receivedAt: new Date().toISOString()
         },
         proxy: {
             status: 200,
-            response: {
-                forwarded: true,
-                traceId: 'abc-123'
-            },
-            rawResponse: JSON.stringify({ forwarded: true, traceId: 'abc-123' }),
+            response: { forwarded: true, traceId: 'abc-123', durationBucket: 'fast' },
+            rawResponse: JSON.stringify({ forwarded: true, traceId: 'abc-123', durationBucket: 'fast' }),
             durationMs: 18
         },
-        body: {
-            event: 'push',
-            repository: {
-                name: 'demo-repository'
-            },
-            user: {
-                id: 42,
-                name: 'Ksenia'
-            }
-        },
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Source': 'demo'
-        },
-        queryParams: {
-            source: 'preview'
-        },
+        body,
+        headers: { 'Content-Type': 'application/json', 'X-Source': 'demo' },
+        queryParams: { source: 'preview' },
         responseStatus: 200,
-        proxyResponse: {
-            forwarded: true,
-            traceId: 'abc-123'
-        },
-        rawProxyResponse: JSON.stringify({ forwarded: true, traceId: 'abc-123' })
+        proxyResponse: { forwarded: true, traceId: 'abc-123', durationBucket: 'fast' },
+        rawProxyResponse: JSON.stringify({ forwarded: true, traceId: 'abc-123', durationBucket: 'fast' })
     };
 }
 
@@ -337,7 +427,7 @@ function slugify(value) {
 
 function escapeHtml(value) {
     const div = document.createElement('div');
-    div.textContent = value || '';
+    div.textContent = value == null ? '' : String(value);
     return div.innerHTML;
 }
 
