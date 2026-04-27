@@ -1,19 +1,28 @@
 openapi: 3.0.3
 info:
   title: Dynamic Webhook Service API
-  description: API для управления динамическими вебхуками, логами запросов и шаблонами.
-  version: 1.0.0
+  version: 1.0.1-demo4
+  description: |
+    API для управления динамическими вебхуками, логами запросов и шаблонами.
+
+    Шаблонизатор поддерживает:
+    - подстановку переменных: `{{body.field}}`, `${body.field}`;
+    - условия: `{{#if body.urgent}}...{{/if}}`;
+    - циклы: `{{#each body.items}}...{{/each}}`.
 servers:
   - url: http://localhost:8080
     description: Local development server
-
 tags:
   - name: health
+    description: Service health checks
   - name: webhooks
+    description: CRUD для вебхуков
   - name: requests
+    description: История входящих запросов и статистика
   - name: templates
+    description: Preview шаблонов
   - name: receiver
-
+    description: Динамические endpoint'ы вебхуков
 paths:
   /api/health:
     get:
@@ -65,6 +74,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateWebhookRequest'
+            examples:
+              simple:
+                summary: Webhook with template transform
+                value:
+                  name: GitHub Push Events
+                  description: Webhook for GitHub push notifications
+                  methods: POST
+                  debugMode: true
+                  proxyUrl: https://httpbin.org/post
+                  proxyHeaders:
+                    Authorization: Bearer demo-token
+                  requestTemplate: |
+                    {
+                      "event": "{{body.event}}",
+                      "repo": "{{body.repository.name}}",
+                      "urgent": "{{#if body.urgent}}{{body.message}}{{/if}}",
+                      "items": "{{#each body.items}}{{name}}={{quantity}};{{/each}}"
+                    }
+                  responseTemplate: |
+                    {"ok": true, "status": "{{proxy.status}}"}
+                  maxLogCount: 100
       responses:
         '201':
           description: Вебхук создан
@@ -73,11 +103,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookResponse'
         '400':
-          description: Ошибка валидации
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
 
   /api/webhooks/{id}:
     get:
@@ -93,11 +119,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookResponse'
         '404':
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
     put:
       tags: [webhooks]
       summary: Обновить вебхук
@@ -117,11 +139,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookResponse'
         '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [webhooks]
       summary: Удалить вебхук
@@ -131,11 +151,7 @@ paths:
         '204':
           description: Webhook deleted
         '404':
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
 
   /api/webhooks/{id}/toggle:
     patch:
@@ -151,11 +167,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookResponse'
         '404':
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
 
   /api/webhooks/{id}/requests:
     get:
@@ -184,11 +196,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PageRequestLogResponse'
         '404':
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [requests]
       summary: Очистить историю запросов вебхука
@@ -198,11 +206,7 @@ paths:
         '204':
           description: Logs removed
         '404':
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
 
   /api/webhooks/{id}/requests/{requestId}:
     get:
@@ -219,11 +223,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RequestLogResponse'
         '404':
-          description: Request log or webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
 
   /api/webhooks/{id}/stats:
     get:
@@ -239,22 +239,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatsResponse'
         '404':
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFound'
 
   /api/templates/preview:
     post:
       tags: [templates]
       summary: Сформировать preview шаблона
+      description: |
+        Возвращает результат применения собственного шаблонизатора к переданному объекту `data`.
+        Preview полезен для проверки `{{#if}}` и `{{#each}}` перед сохранением вебхука.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/TemplatePreviewRequest'
+            examples:
+              condition:
+                summary: Conditional block
+                value:
+                  template: '{{#if body.urgent}}URGENT: {{body.message}}{{/if}}'
+                  data:
+                    body:
+                      urgent: true
+                      message: Deploy now
+              each:
+                summary: Each block
+                value:
+                  template: '{{#each body.items}}{{name}}={{quantity}};{{/each}}'
+                  data:
+                    body:
+                      items:
+                        - name: build
+                          quantity: 1
+                        - name: test
+                          quantity: 3
       responses:
         '200':
           description: Preview generated
@@ -262,12 +281,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TemplatePreviewResponse'
+              examples:
+                each:
+                  value:
+                    result: build=1;test=3;
         '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
 
   /webhook/{slug}:
     get:
@@ -275,25 +294,21 @@ paths:
       summary: Динамический endpoint вебхука
       description: Endpoint принимает методы, разрешённые конфигурацией вебхука. Здесь показан пример GET.
       parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/WebhookSlug'
       responses:
+        '200':
+          description: Proxy or templated response returned
         '202':
-          description: Request accepted
+          description: Request accepted without proxy response
+        '404':
+          $ref: '#/components/responses/NotFound'
         '405':
           description: Method not allowed
     post:
       tags: [receiver]
       summary: Отправить запрос на динамический endpoint вебхука
       parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/WebhookSlug'
       requestBody:
         required: false
         content:
@@ -310,7 +325,7 @@ paths:
         '202':
           description: Request accepted without proxy response
         '404':
-          description: Webhook not found
+          $ref: '#/components/responses/NotFound'
         '405':
           description: Method not allowed
         '409':
@@ -334,6 +349,27 @@ components:
       schema:
         type: string
         format: uuid
+    WebhookSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        example: github-push-events
+
+  responses:
+    BadRequest:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
     CreateWebhookRequest:
@@ -349,6 +385,7 @@ components:
         methods:
           type: string
           example: POST
+          description: Comma-separated list of allowed HTTP methods.
         debugMode:
           type: boolean
           default: true
@@ -365,21 +402,23 @@ components:
         requestTemplate:
           type: string
           nullable: true
-          example: '{"event":"{{body.event}}","repo":"{{body.repository.name}}"}'
+          description: Template applied before proxy request.
+          example: |
+            {"event":"{{body.event}}","repo":"{{body.repository.name}}"}
         responseTemplate:
           type: string
           nullable: true
-          example: '{"ok":true,"status":"{{proxy.status}}"}'
+          description: Template applied after proxy response.
+          example: |
+            {"ok":true,"status":"{{proxy.status}}"}
         maxLogCount:
           type: integer
           default: 100
           minimum: 1
           maximum: 10000
-
     UpdateWebhookRequest:
       allOf:
         - $ref: '#/components/schemas/CreateWebhookRequest'
-
     WebhookResponse:
       type: object
       properties:
@@ -422,7 +461,6 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     PageWebhookResponse:
       type: object
       properties:
@@ -437,7 +475,6 @@ components:
         total:
           type: integer
           format: int64
-
     RequestLogResponse:
       type: object
       properties:
@@ -481,7 +518,6 @@ components:
           type: integer
           format: int64
           nullable: true
-
     PageRequestLogResponse:
       type: object
       properties:
@@ -496,7 +532,6 @@ components:
         total:
           type: integer
           format: int64
-
     StatsResponse:
       type: object
       properties:
@@ -515,23 +550,27 @@ components:
           type: string
           format: date-time
           nullable: true
-
     TemplatePreviewRequest:
       type: object
       required: [template]
       properties:
         template:
           type: string
+          example: '{{#each body.items}}{{name}};{{/each}}'
         data:
           type: object
           additionalProperties: true
-
+          example:
+            body:
+              items:
+                - name: build
+                - name: test
     TemplatePreviewResponse:
       type: object
       properties:
         result:
           type: string
-
+          example: build;test;
     ErrorResponse:
       type: object
       properties:
