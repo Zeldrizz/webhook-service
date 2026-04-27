@@ -1,8 +1,3 @@
-/**
- * Toast notification component.
- * Displays success, error, info, and warning messages.
- */
-
 const TYPE_TO_CLASS = {
     success: 'success',
     error: 'danger',
@@ -16,6 +11,8 @@ function getContainer() {
         container = document.createElement('div');
         container.id = 'notification-container';
         container.className = 'notification-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-atomic', 'false');
         document.body.appendChild(container);
     }
     return container;
@@ -25,12 +22,13 @@ export function showNotification(message, type = 'info', timeout = 3500) {
     const container = getContainer();
     const alert = document.createElement('div');
     const bootstrapType = TYPE_TO_CLASS[type] || TYPE_TO_CLASS.info;
+    const text = normalizeMessage(message);
 
     alert.className = `alert alert-${bootstrapType} alert-dismissible fade show shadow-sm notification-toast`;
-    alert.setAttribute('role', 'alert');
+    alert.setAttribute('role', type === 'error' ? 'alert' : 'status');
     alert.innerHTML = `
         <div class="d-flex align-items-start gap-2">
-            <div class="flex-grow-1">${escapeHtml(message)}</div>
+            <div class="flex-grow-1">${escapeHtml(text)}</div>
             <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
     `;
@@ -51,8 +49,18 @@ export function showNotification(message, type = 'info', timeout = 3500) {
     return alert;
 }
 
+function normalizeMessage(message) {
+    if (message instanceof Error) {
+        return message.message || 'Unexpected error';
+    }
+    if (message && typeof message === 'object') {
+        return message.message || JSON.stringify(message);
+    }
+    return message || 'Notification';
+}
+
 function escapeHtml(value) {
     const div = document.createElement('div');
-    div.textContent = value || '';
+    div.textContent = value == null ? '' : String(value);
     return div.innerHTML;
 }
