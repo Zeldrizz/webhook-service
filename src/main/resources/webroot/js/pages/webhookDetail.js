@@ -166,16 +166,25 @@ export async function renderWebhookDetail(container, webhookId) {
 
     document.getElementById('btn-test-request').addEventListener('click', async () => {
         const btn = document.getElementById('btn-test-request');
+        const testMethod = pickTestMethod(webhook.methods);
+        const requestUrl = buildTestRequestUrl(webhook.endpointUrl, testMethod);
+        const requestOptions = buildTestRequestOptions(testMethod);
+
         btn.disabled = true;
         btn.textContent = 'Sending...';
         try {
-            const response = await fetch(webhook.endpointUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ test: true, timestamp: Date.now() })
-            });
-            const data = await response.json();
-            showNotification(`Test sent! Request ID: ${data.requestId || 'unknown'}`, 'success');
+            const response = await fetch(requestUrl, requestOptions);
+            const data = await parseResponsePayload(response);
+
+            if (!response.ok) {
+                const errorMessage = typeof data?.message === 'string'
+                    ? data.message
+                    : `HTTP ${response.status}`;
+                throw new Error(`${testMethod} failed: ${errorMessage}`);
+            }
+
+            const requestId = typeof data?.requestId === 'string' ? data.requestId : 'unknown';
+            showNotification(`Test ${testMethod} sent! Request ID: ${requestId}`, 'success');
             await renderWebhookDetail(container, webhookId);
         } catch (error) {
             showNotification('Test request failed: ' + error.message, 'error');
@@ -325,6 +334,57 @@ function renderMethodCounts(methodCounts) {
         return '—';
     }
     return entries.map(([method, count]) => `<span class="app-chip">${escapeHtml(method)} · ${count}</span>`).join(' ');
+}
+
+function parseWebhookMethods(methods) {
+    return (methods || 'POST')
+        .split(',')
+        .map(method => method.trim().toUpperCase())
+        .filter(Boolean);
+}
+
+function pickTestMethod(methods) {
+    const allowedMethods = parseWebhookMethods(methods);
+    if (allowedMethods.includes('POST')) {
+        return 'POST';
+    }
+    return allowedMethods[0] || 'POST';
+}
+
+function buildTestRequestUrl(endpointUrl, method) {
+    if (method !== 'GET') {
+        return endpointUrl;
+    }
+
+    const url = new URL(endpointUrl, window.location.origin);
+    url.searchParams.set('test', 'true');
+    url.searchParams.set('timestamp', String(Date.now()));
+    return url.toString();
+}
+
+function buildTestRequestOptions(method) {
+    const options = { method };
+    if (method === 'GET') {
+        return options;
+    }
+
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify({ test: true, timestamp: Date.now() });
+    return options;
+}
+
+async function parseResponsePayload(response) {
+    const contentType = response.headers.get('Content-Type') || '';
+    if (contentType.includes('application/json')) {
+        return response.json();
+    }
+
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { raw: text };
+    }
 }
 
 function formatDate(value) {
