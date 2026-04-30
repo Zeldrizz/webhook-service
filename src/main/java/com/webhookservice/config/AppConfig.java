@@ -15,11 +15,34 @@ public record AppConfig(
         String databaseUser,
         String databasePassword,
         int databasePoolSize,
+        int databasePipeliningLimit,
         long databaseConnectionTimeout,
         long proxyTimeoutMs,
         int proxyMaxRetries,
+        long proxyRetryBaseDelayMs,
+        long proxyRetryMaxDelayMs,
+        double proxyRetryMultiplier,
+        boolean proxyRetryJitter,
+        boolean proxyRetryOnStatus5xx,
+        boolean proxyCircuitBreakerEnabled,
+        int proxyCircuitBreakerMaxFailures,
+        long proxyCircuitBreakerResetMs,
+        long proxyCircuitBreakerTimeoutMs,
+        boolean authEnabled,
+        String adminApiKey,
         int webhookMaxLogCountDefault,
-        int webhookCleanupIntervalHours
+        int webhookCleanupIntervalHours,
+        boolean cacheEnabled,
+        long cacheWebhookMaxSize,
+        long cacheWebhookTtlSeconds,
+        long cacheNegativeTtlSeconds,
+        long cacheStatsMaxSize,
+        long cacheStatsTtlSeconds,
+        long cacheTemplateMaxSize,
+        long cacheTemplateTtlSeconds,
+        boolean requestLogBatchEnabled,
+        int requestLogBatchMaxSize,
+        long requestLogBatchFlushMs
 ) {
 
     private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
@@ -31,6 +54,7 @@ public record AppConfig(
                 .setUser(databaseUser())
                 .setPassword(databasePassword())
                 .setCachePreparedStatements(true)
+                .setPipeliningLimit(databasePipeliningLimit)
                 .setReconnectAttempts(2)
                 .setReconnectInterval(1000);
         return options;
@@ -50,12 +74,35 @@ public record AppConfig(
                 config.getString("database.url", "jdbc:postgresql://localhost:5432/webhooks"),
                 config.getString("database.user", "webhook_user"),
                 config.getString("database.password", "webhook_pass"),
-                config.getInteger("database.pool-size", 5),
+                config.getInteger("database.pool-size", 32),
+                config.getInteger("database.pipelining-limit", 256),
                 config.getLong("database.connection-timeout", 30000L),
                 config.getLong("proxy.timeout-ms", 10000L),
-                config.getInteger("proxy.max-retries", 0),
+                config.getInteger("proxy.max-retries", 3),
+                config.getLong("proxy.retry.base-delay-ms", 100L),
+                config.getLong("proxy.retry.max-delay-ms", 5000L),
+                getDoubleValue(config, "proxy.retry.multiplier", 2.0),
+                config.getBoolean("proxy.retry.jitter", true),
+                config.getBoolean("proxy.retry.retry-on-status-5xx", true),
+                config.getBoolean("proxy.circuit-breaker.enabled", true),
+                config.getInteger("proxy.circuit-breaker.max-failures", 5),
+                config.getLong("proxy.circuit-breaker.reset-ms", 3000L),
+                config.getLong("proxy.circuit-breaker.timeout-ms", 10000L),
+                config.getBoolean("auth.enabled", true),
+                config.getString("auth.admin-api-key", "changeme"),
                 config.getInteger("webhook.max-log-count-default", 100),
-                config.getInteger("webhook.cleanup-interval-hours", 24)
+                config.getInteger("webhook.cleanup-interval-hours", 24),
+                config.getBoolean("cache.enabled", true),
+                config.getLong("cache.webhook.max-size", 10000L),
+                config.getLong("cache.webhook.ttl-seconds", 300L),
+                config.getLong("cache.webhook.negative-ttl-seconds", 30L),
+                config.getLong("cache.stats.max-size", 1000L),
+                config.getLong("cache.stats.ttl-seconds", 30L),
+                config.getLong("cache.template.max-size", 1000L),
+                config.getLong("cache.template.ttl-seconds", 1800L),
+                config.getBoolean("request-log.batch.enabled", true),
+                config.getInteger("request-log.batch.max-size", 100),
+                config.getLong("request-log.batch.flush-ms", 100L)
         );
     }
 
@@ -76,8 +123,8 @@ public record AppConfig(
 
     private static void parseSimpleYaml(String content, JsonObject result) {
         String[] lines = content.split("\n");
-        String[] prefixStack = new String[10];
-        int[] indentStack = new int[10];
+        String[] prefixStack = new String[16];
+        int[] indentStack = new int[16];
         int depth = 0;
 
         for (String rawLine : lines) {
@@ -119,7 +166,20 @@ public record AppConfig(
         if (value.equalsIgnoreCase("false")) return false;
         try { return Integer.parseInt(value); } catch (NumberFormatException ignored) {}
         try { return Long.parseLong(value); } catch (NumberFormatException ignored) {}
+        try { return Double.parseDouble(value); } catch (NumberFormatException ignored) {}
         return value;
+    }
+
+    /**
+     * Lenient double getter that also accepts a stringified number (the simple
+     * YAML parser in {@link #parseSimpleYaml} stores values verbatim until a
+     * specific type is requested).
+     */
+    private static double getDoubleValue(JsonObject config, String key, double defaultValue) {
+        Object raw = config.getValue(key);
+        if (raw == null) return defaultValue;
+        if (raw instanceof Number n) return n.doubleValue();
+        try { return Double.parseDouble(raw.toString()); } catch (NumberFormatException e) { return defaultValue; }
     }
 
     private static String resolveEnv(String value) {

@@ -5,16 +5,51 @@ database:
   url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/webhooks}
   user: ${DATABASE_USER:webhook_user}
   password: ${DATABASE_PASSWORD:webhook_pass}
-  pool-size: 20
+  pool-size: 32
+  pipelining-limit: 256
   connection-timeout: 30000
 
 proxy:
   timeout-ms: 10000
-  max-retries: 0
+  max-retries: 3
+  retry:
+    base-delay-ms: 100
+    max-delay-ms: 5000
+    multiplier: 2.0
+    jitter: true
+    retry-on-status-5xx: true
+  circuit-breaker:
+    enabled: true
+    max-failures: 5
+    reset-ms: 3000
+    timeout-ms: 10000
+
+auth:
+  enabled: true
+  admin-api-key: ${ADMIN_API_KEY:password}
 
 webhook:
   max-log-count-default: 100
   cleanup-interval-hours: 24
+
+cache:
+  enabled: true
+  webhook:
+    max-size: 10000
+    ttl-seconds: 300
+    negative-ttl-seconds: 30
+  stats:
+    max-size: 1000
+    ttl-seconds: 30
+  template:
+    max-size: 1000
+    ttl-seconds: 1800
+
+request-log:
+  batch:
+    enabled: true
+    max-size: 100
+    flush-ms: 100
 
 logging:
   level: INFO
