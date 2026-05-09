@@ -165,6 +165,7 @@ class WebhookServiceTest {
     @Test
     void delete_existing_returnsTrue(Vertx vertx, VertxTestContext tc) {
         UUID id = UUID.randomUUID();
+        when(webhookRepository.findById(id)).thenReturn(Future.succeededFuture(Optional.of(createSampleWebhook(id))));
         when(webhookRepository.deleteById(id)).thenReturn(Future.succeededFuture(true));
 
         webhookService.delete(id)
