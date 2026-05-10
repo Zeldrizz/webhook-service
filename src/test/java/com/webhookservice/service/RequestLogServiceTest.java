@@ -225,19 +225,21 @@ class RequestLogServiceTest {
 
             calls.add(new Call(method.getName(), args == null ? new Object[0] : Arrays.copyOf(args, args.length)));
 
+            // For Future-returning methods, surface configured failures as failed Futures
+            // (matches the Vert.x repository contract: never throw synchronously).
+            if (Future.class.isAssignableFrom(method.getReturnType())) {
+                if ("save".equals(method.getName()) && saveFailure != null) {
+                    return Future.failedFuture(saveFailure);
+                }
+                if ("trimToMaxCount".equals(method.getName()) && trimFailure != null) {
+                    return Future.failedFuture(trimFailure);
+                }
+            }
+
             Object value = switch (method.getName()) {
-                case "save" -> {
-                    if (saveFailure != null) {
-                        throw saveFailure;
-                    }
-                    yield args[0];
-                }
-                case "trimToMaxCount" -> {
-                    if (trimFailure != null) {
-                        throw trimFailure;
-                    }
-                    yield null;
-                }
+                case "save" -> args[0];
+                case "saveBatch" -> null;
+                case "trimToMaxCount" -> null;
                 case "findByWebhookId" -> page;
                 case "findByWebhookIdAndId" -> foundLog;
                 case "deleteByWebhookId" -> deletedCount;
