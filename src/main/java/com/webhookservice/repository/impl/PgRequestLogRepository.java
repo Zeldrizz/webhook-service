@@ -97,6 +97,20 @@ public class PgRequestLogRepository implements RequestLogRepository {
     }
 
     @Override
+    public Future<Void> saveBatch(List<RequestLog> logs) {
+        if (logs == null || logs.isEmpty()) {
+            return Future.succeededFuture();
+        }
+        List<Tuple> batch = new ArrayList<>(logs.size());
+        for (RequestLog r : logs) {
+            batch.add(insertTuple(r));
+        }
+        return pool.preparedQuery(INSERT_SQL)
+                .executeBatch(batch)
+                .mapEmpty();
+    }
+
+    @Override
     public Future<Page<RequestLog>> findByWebhookId(UUID webhookId, int page, int size) {
         int offset = page * size;
         return pool.preparedQuery(SELECT_PAGE_SQL)
