@@ -2,7 +2,11 @@ package com.webhookservice.service;
 
 import com.webhookservice.model.RequestLog;
 import com.webhookservice.model.Webhook;
+import io.vertx.circuitbreaker.CircuitBreaker;
+import io.vertx.circuitbreaker.CircuitBreakerOptions;
+import io.vertx.circuitbreaker.OpenCircuitException;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.client.HttpRequest;
@@ -12,19 +16,40 @@ import io.vertx.ext.web.client.WebClientOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.function.Function;
-
+/**
+ * Async HTTP proxy: exponential-backoff retry (via {@link RetryPolicy}) inside a
+ * {@link CircuitBreaker}. {@link #forward} always succeeds with a {@link RequestLog} —
+ * failure modes surface as synthetic 502/503 entries, never as failed Futures.
+ */
 public class ProxyService {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyService.class);
 
+    private final Vertx vertx;
     private final WebClient webClient;
     private final long timeoutMs;
-    private final int maxRetries;
+    private final RetryPolicy retryPolicy;
+    private final CircuitBreaker circuitBreaker;
 
+    /** Legacy constructor for tests without retries or breaker. */
     public ProxyService(Vertx vertx, long timeoutMs, int maxRetries) {
+        this(vertx, timeoutMs,
+                new RetryPolicy(maxRetries, 100L, 5000L, 2.0, true, true),
+                false, 5, 3000L, timeoutMs);
+    }
+
+    public ProxyService(
+            Vertx vertx,
+            long timeoutMs,
+            RetryPolicy retryPolicy,
+            boolean circuitBreakerEnabled,
+            int cbMaxFailures,
+            long cbResetMs,
+            long cbTimeoutMs
+    ) {
+        this.vertx = vertx;
         this.timeoutMs = timeoutMs;
-        this.maxRetries = maxRetries;
+        this.retryPolicy = retryPolicy;
         int connectTimeout = timeoutMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeoutMs;
         int idleTimeout = timeoutMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeoutMs;
         this.webClient = WebClient.create(vertx, new WebClientOptions()
@@ -33,17 +58,52 @@ public class ProxyService {
                 .setMaxPoolSize(50)
                 .setKeepAlive(true)
                 .setDecompressionSupported(true));
+
+        if (circuitBreakerEnabled) {
+            this.circuitBreaker = CircuitBreaker.create("proxy-breaker", vertx,
+                    new CircuitBreakerOptions()
+                            .setMaxFailures(cbMaxFailures)
+                            .setTimeout(cbTimeoutMs)
+                            .setResetTimeout(cbResetMs)
+                            .setFallbackOnFailure(false)
+            );
+            this.circuitBreaker.openHandler(v ->
+                    log.warn("Proxy circuit breaker OPENED after {} consecutive failures", cbMaxFailures));
+            this.circuitBreaker.halfOpenHandler(v ->
+                    log.info("Proxy circuit breaker HALF-OPEN (probe allowed)"));
+            this.circuitBreaker.closeHandler(v ->
+                    log.info("Proxy circuit breaker CLOSED (upstream recovered)"));
+        } else {
+            this.circuitBreaker = null;
+        }
     }
 
     public Future<RequestLog> forward(Webhook webhook, RequestLog requestLog) {
-        return forwardWithRetry(webhook, requestLog, 0);
-    }
-
-    private Future<RequestLog> forwardWithRetry(Webhook webhook, RequestLog requestLog, int attempt) {
         if (webhook.proxyUrl() == null || webhook.proxyUrl().isBlank()) {
             return Future.succeededFuture(requestLog);
         }
+        if (circuitBreaker == null) {
+            return forwardWithRetry(webhook, requestLog, 0).recover(err -> recoverFromFailure(err, requestLog));
+        }
+        return circuitBreaker.<RequestLog>execute(promise ->
+                forwardWithRetry(webhook, requestLog, 0).onComplete(promise)
+        ).recover(err -> {
+            if (err instanceof OpenCircuitException) {
+                log.warn("Proxy circuit OPEN — short-circuit for webhook={}", webhook.slug());
+                return Future.succeededFuture(requestLog.withProxyResult(503, "Proxy circuit open", 0L));
+            }
+            return recoverFromFailure(err, requestLog);
+        });
+    }
 
+    private Future<RequestLog> recoverFromFailure(Throwable err, RequestLog requestLog) {
+        if (err instanceof ProxyFailure failure) {
+            return Future.succeededFuture(requestLog.withProxyResult(502, failure.getMessage(), failure.durationMs));
+        }
+        return Future.succeededFuture(requestLog.withProxyResult(502, "Proxy error: " + err.getMessage(), 0L));
+    }
+
+    private Future<RequestLog> forwardWithRetry(Webhook webhook, RequestLog requestLog, int attempt) {
         long startTime = System.nanoTime();
 
         ProxyRequestBuilder requestBuilder = new ProxyRequestBuilder(webClient)
@@ -63,7 +123,6 @@ public class ProxyService {
         }
 
         HttpRequest<Buffer> proxyRequest = requestBuilder.build();
-
         proxyRequest.timeout(timeoutMs);
 
         Future<HttpResponse<Buffer>> responseFuture;
@@ -74,29 +133,45 @@ public class ProxyService {
             responseFuture = proxyRequest.send();
         }
 
-        Function<Throwable, Future<RequestLog>> retryHandler = err -> {
-            long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-            if (attempt < maxRetries) {
-                log.warn("Proxy attempt {}/{} failed: webhook={}, error={}, duration={}ms",
-                        attempt + 1, maxRetries, webhook.slug(), err.getMessage(), durationMs);
-                return forwardWithRetry(webhook, requestLog, attempt + 1);
-            }
-            String errorMsg = classifyError(err);
-            log.warn("Proxy failed after {} attempts: webhook={}, error={}, duration={}ms",
-                    maxRetries, webhook.slug(), errorMsg, durationMs);
-            return Future.succeededFuture(requestLog.withProxyResult(502, errorMsg, durationMs));
-        };
-
         return responseFuture
-                .map(response -> {
+                .compose(response -> {
                     long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-                    String responseBody = response.bodyAsString();
                     int status = response.statusCode();
-                    log.debug("Proxy response: status={}, duration={}ms, webhook={}, attempt={}",
-                            status, durationMs, webhook.slug(), attempt + 1);
-                    return requestLog.withProxyResult(status, responseBody, durationMs);
+                    String responseBody = response.bodyAsString();
+                    if (retryPolicy.shouldRetryStatus(status) && attempt < retryPolicy.maxRetries()) {
+                        log.warn("Proxy attempt {}/{} got retry-worthy status {}: webhook={}, duration={}ms",
+                                attempt + 1, retryPolicy.maxRetries() + 1, status, webhook.slug(), durationMs);
+                        return delayThen(retryPolicy.delayForAttempt(attempt),
+                                () -> forwardWithRetry(webhook, requestLog, attempt + 1));
+                    }
+                    if (status >= 200) {
+                        log.debug("Proxy response: status={}, duration={}ms, webhook={}, attempt={}",
+                                status, durationMs, webhook.slug(), attempt + 1);
+                    }
+                    return Future.succeededFuture(requestLog.withProxyResult(status, responseBody, durationMs));
                 })
-                .recover(retryHandler);
+                .recover(err -> {
+                    long durationMs = (System.nanoTime() - startTime) / 1_000_000;
+                    if (attempt < retryPolicy.maxRetries()) {
+                        log.warn("Proxy attempt {}/{} failed: webhook={}, error={}, duration={}ms",
+                                attempt + 1, retryPolicy.maxRetries() + 1, webhook.slug(), err.getMessage(), durationMs);
+                        return delayThen(retryPolicy.delayForAttempt(attempt),
+                                () -> forwardWithRetry(webhook, requestLog, attempt + 1));
+                    }
+                    String errorMsg = classifyError(err);
+                    log.warn("Proxy exhausted retries: webhook={}, error={}, duration={}ms",
+                            webhook.slug(), errorMsg, durationMs);
+                    return Future.failedFuture(new ProxyFailure(errorMsg, durationMs, requestLog));
+                });
+    }
+
+    private <T> Future<T> delayThen(long delayMs, java.util.function.Supplier<Future<T>> task) {
+        if (delayMs <= 0 || vertx == null) {
+            return task.get();
+        }
+        Promise<T> promise = Promise.promise();
+        vertx.setTimer(delayMs, id -> task.get().onComplete(promise));
+        return promise.future();
     }
 
     private boolean hasHeader(java.util.Map<String, String> headers, String name) {
@@ -116,7 +191,24 @@ public class ProxyService {
         return "Proxy error: " + msg;
     }
 
+    /** Carries 502 details (message + total duration) through the circuit breaker. */
+    private static final class ProxyFailure extends RuntimeException {
+        private final long durationMs;
+
+        ProxyFailure(String message, long durationMs, RequestLog ignored) {
+            super(message);
+            this.durationMs = durationMs;
+        }
+    }
+
+    public boolean isCircuitOpen() {
+        return circuitBreaker != null && circuitBreaker.state() == io.vertx.circuitbreaker.CircuitBreakerState.OPEN;
+    }
+
     public void close() {
         webClient.close();
+        if (circuitBreaker != null) {
+            circuitBreaker.close();
+        }
     }
 }
