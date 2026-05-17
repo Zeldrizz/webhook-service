@@ -19,7 +19,8 @@ public class App {
 
         Vertx vertx = Vertx.vertx(options);
 
-        int instances = cpus;
+        int instances = Integer.parseInt(
+                System.getenv().getOrDefault("VERTICLE_INSTANCES", String.valueOf(cpus)));
         DeploymentOptions deploymentOptions = new DeploymentOptions()
                 .setInstances(instances)
                 .setHa(false);

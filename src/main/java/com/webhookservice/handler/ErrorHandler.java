@@ -5,6 +5,7 @@ import com.webhookservice.util.JsonUtil;
 import com.webhookservice.validation.ValidationException;
 import io.vertx.core.Handler;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.pgclient.PgException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +25,8 @@ public class ErrorHandler implements Handler<RoutingContext> {
             sendError(ctx, 400, String.join("; ", ve.errors()));
         } else if (failure instanceof IllegalArgumentException) {
             sendError(ctx, 400, failure.getMessage());
+        } else if (failure instanceof PgException pg && "23505".equals(pg.getSqlState())) {
+            sendError(ctx, 409, "Slug already exists");
         } else {
             log.error("Unhandled error on {}", ctx.request().path(), failure);
             sendError(ctx, 500, "Internal server error");

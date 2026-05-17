@@ -88,7 +88,7 @@ proxy:
 
 auth:
   enabled: true
-  admin-api-key: ${ADMIN_API_KEY:changeme}  # сменить перед деплоем!
+  admin-api-key: ${ADMIN_API_KEY:password}  # сменить перед деплоем!
 
 cache:
   enabled: true        # false = все кэши отключены (для сравнительных замеров)
@@ -208,7 +208,7 @@ WebhookReceiverHandler
 
 ```bash
 # Текущие метрики всех кэшей
-curl -H "X-API-Key: changeme" http://localhost:8080/api/cache/stats
+curl -H "X-API-Key: password" http://localhost:8080/api/cache/stats
 
 # Пример ответа
 {
@@ -221,7 +221,7 @@ curl -H "X-API-Key: changeme" http://localhost:8080/api/cache/stats
 }
 
 # Сброс всех кэшей (например, после ручного изменения в БД)
-curl -X POST -H "X-API-Key: changeme" http://localhost:8080/api/cache/flush
+curl -X POST -H "X-API-Key: password" http://localhost:8080/api/cache/flush
 ```
 
 **Как запустить smoke-benchmark:**
@@ -230,17 +230,17 @@ curl -X POST -H "X-API-Key: changeme" http://localhost:8080/api/cache/flush
 # Создать тестовый вебхук
 curl -s -X POST http://localhost:8080/api/webhooks \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: changeme" \
+  -H "X-API-Key: password" \
   -d '{"name":"bench","slug":"bench-hook","allowedMethods":["POST"]}' | jq .
 
 # Снапшот ДО
-curl -s -H "X-API-Key: changeme" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
+curl -s -H "X-API-Key: password" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
 
 # 5000 одинаковых запросов
 ab -n 5000 -c 50 -p body.json -T application/json http://localhost:8080/webhook/bench-hook
 
 # Снапшот ПОСЛЕ — hitRatio должен быть ≥ 0.99
-curl -s -H "X-API-Key: changeme" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
+curl -s -H "X-API-Key: password" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
 ```
 
 Для сравнения без кэша — пересобрать с `cache.enabled: false` в `application.yaml`.
@@ -274,10 +274,10 @@ Retry strategy:  exponential backoff + full jitter
 
 ```bash
 # Пример запроса с ключом
-curl -H "X-API-Key: changeme" http://localhost:8080/api/webhooks
+curl -H "X-API-Key: password" http://localhost:8080/api/webhooks
 
 # Проверка что ключ валиден
-curl -H "X-API-Key: changeme" http://localhost:8080/api/auth/verify
+curl -H "X-API-Key: password" http://localhost:8080/api/auth/verify
 # 200 OK — ключ принят
 # 401 Unauthorized — неверный ключ
 ```

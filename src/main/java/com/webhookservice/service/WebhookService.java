@@ -53,7 +53,7 @@ public class WebhookService {
         }
         Webhook webhook = WebhookFactory.create(dto);
         return webhookRepository.save(webhook)
-                .onSuccess(this::onUpsert);
+                .onSuccess(this::onAfterCreate);
     }
 
     public Future<Webhook> getById(UUID id) {
@@ -127,12 +127,21 @@ public class WebhookService {
         }
     }
 
+    private void onAfterCreate(Webhook webhook) {
+        // On create: clear only the local negative-slug entry (if any was cached before this slug existed).
+        // No EventBus publish needed — no other verticle can have a positive cache entry for a brand-new slug,
+        // and publishing UPSERT would race with the first getBySlug call populating the cache.
+        if (cache != null && webhook != null) {
+            cache.invalidate(webhook.id(), webhook.slug());
+        }
+    }
+
     private void onUpsert(Webhook webhook) {
         if (webhook == null) {
             return;
         }
         if (cache != null) {
-            cache.putWebhook(webhook);
+            cache.invalidate(webhook.id(), webhook.slug());
         }
         if (cacheManager != null) {
             cacheManager.publishUpsert(webhook.id(), webhook.slug());
