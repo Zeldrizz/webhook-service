@@ -20,7 +20,8 @@
                 <span class="app-brand-subtitle">Delivery control panel</span>
             </span>
         </a>
-        <div class="navbar-nav ms-auto">
+        <div class="navbar-nav ms-auto align-items-lg-center">
+            <span id="cache-badge" class="badge rounded-pill text-bg-light me-lg-3 mb-2 mb-lg-0" title="Cache metrics">Cache: —</span>
             <a class="nav-link" href="#dashboard">Dashboard</a>
             <a class="nav-link" href="#create">Create</a>
             <a class="nav-link" href="/swagger" target="_blank" rel="noreferrer">Swagger</a>
@@ -29,16 +30,17 @@
 </nav>
 
 <main class="app-shell">
-<div class="container">
-    <div id="app">
-        <div class="text-center py-5">
-            <div class="spinner-border" role="status" aria-hidden="true"></div>
+    <div class="container">
+        <div id="app">
+            <div class="text-center py-5">
+                <div class="spinner-border" role="status" aria-hidden="true"></div>
+            </div>
         </div>
     </div>
-</div>
 </main>
 
 <script src="/js/auth.js"></script>
+<script type="module" src="/js/components/cacheAdmin.js"></script>
 <script type="module" src="/js/app.js"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ package com.webhookservice.handler;
 import com.webhookservice.model.dto.TemplatePreviewRequest;
 import com.webhookservice.model.dto.TemplatePreviewResponse;
 import com.webhookservice.service.TemplateService;
+import com.webhookservice.template.TemplateParseException;
 import com.webhookservice.util.JsonUtil;
 import io.vertx.ext.web.RoutingContext;
 
@@ -20,9 +21,20 @@ public class TemplateHandler {
             throw new IllegalArgumentException("template is required");
         }
 
-        String result = templateService.render(request.template(), request.data());
-        ctx.response()
-                .putHeader("Content-Type", "application/json")
-                .end(JsonUtil.toJson(new TemplatePreviewResponse(result)));
+        try {
+            String result = templateService.render(request.template(), request.data());
+            ctx.response()
+                    .putHeader("Content-Type", "application/json")
+                    .end(JsonUtil.toJson(TemplatePreviewResponse.success(result)));
+        } catch (TemplateParseException error) {
+            ctx.response()
+                    .putHeader("Content-Type", "application/json")
+                    .end(JsonUtil.toJson(TemplatePreviewResponse.error(
+                            error.getMessage(),
+                            error.line(),
+                            error.column(),
+                            error.snippet()
+                    )));
+        }
     }
 }

@@ -1,5 +1,3 @@
-// Admin auth gate: wraps fetch to attach X-API-Key on /api/* calls, shows a
-// login overlay when no key is stored or a 401 comes back. Must load before app.js.
 (function () {
     const STORAGE_KEY = 'ws.adminApiKey';
     const HEADER_NAME = 'X-API-Key';
@@ -49,28 +47,64 @@
         overlay.id = 'ws-auth-overlay';
         overlay.style.cssText = [
             'position:fixed', 'inset:0', 'z-index:9999',
-            'background:rgba(15,16,22,0.92)', 'backdrop-filter:blur(6px)',
+            'background:rgba(235,228,216,0.72)', 'backdrop-filter:blur(20px)',
             'display:flex', 'align-items:center', 'justify-content:center',
-            'font-family:Manrope,system-ui,sans-serif', 'color:#f4f5f8'
+            'font-family:Manrope,system-ui,sans-serif', 'color:#1f2722',
+            'padding:24px'
         ].join(';') + ';';
 
         overlay.innerHTML = `
-            <form id="ws-auth-form" autocomplete="off" style="background:#1c1f29;border:1px solid #2c303d;border-radius:14px;padding:32px;width:min(420px,92vw);box-shadow:0 24px 60px rgba(0,0,0,0.55);">
-                <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;letter-spacing:-0.01em;">Webhook Service</h2>
-                <p style="margin:0 0 18px;font-size:13px;color:#9aa0b3;">Введите admin API-ключ, чтобы открыть панель.</p>
-                <label for="ws-auth-input" style="display:block;margin-bottom:6px;font-size:12px;color:#9aa0b3;text-transform:uppercase;letter-spacing:0.06em;">API key</label>
+            <form id="ws-auth-form" autocomplete="off" style="background:linear-gradient(145deg,rgba(255,252,247,0.97),rgba(244,236,224,0.94));border:1px solid rgba(199,186,168,0.9);border-radius:1.55rem;padding:32px;width:min(420px,92vw);box-shadow:0 24px 60px rgba(48,37,25,0.18);">
+                <h2 style="margin:0 0 6px;font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#1f2722;display:flex;align-items:center;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#435649"
+                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+                         style="margin-right:8px;vertical-align:-2px;">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Webhook Service
+                </h2>
+                <p style="margin:0 0 18px;font-size:13px;color:#6a7269;line-height:1.55;">Введите admin API-ключ, чтобы открыть панель управления.</p>
+                <label for="ws-auth-input" style="display:block;margin-bottom:6px;font-size:12px;color:#6a7269;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">API key</label>
                 <input id="ws-auth-input" type="password" autocomplete="current-password" required
-                       style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid #2c303d;background:#11141c;color:#f4f5f8;font-family:'IBM Plex Mono',monospace;font-size:14px;outline:none;" />
-                <div id="ws-auth-error" style="display:none;margin-top:10px;color:#ff7a7a;font-size:13px;"></div>
+                       style="width:100%;padding:11px 13px;border-radius:1rem;border:1px solid rgba(199,186,168,0.9);background:rgba(255,255,255,0.74);color:#1f2722;font-family:'IBM Plex Mono',monospace;font-size:14px;outline:none;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease;" />
+                <div id="ws-auth-error" style="display:none;margin-top:10px;color:#8b5360;font-size:13px;font-weight:600;"></div>
                 <button id="ws-auth-submit" type="submit"
-                        style="margin-top:18px;width:100%;padding:11px 14px;border-radius:8px;border:none;background:#6c8cff;color:#0b0d13;font-weight:600;font-size:14px;cursor:pointer;">
+                        style="margin-top:18px;width:100%;padding:12px 14px;border-radius:999px;border:none;background:linear-gradient(135deg,#435649,#2c3a31);color:#f8f5ef;font-weight:700;font-size:14px;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,background .16s ease;">
                     Войти
                 </button>
-                <p style="margin:16px 0 0;font-size:12px;color:#717789;line-height:1.5;">
-                    Ключ задаётся в конфигурации сервера через переменную <code style="background:#11141c;padding:1px 6px;border-radius:4px;">ADMIN_API_KEY</code>.
+                <p style="margin:16px 0 0;font-size:12px;color:#6a7269;line-height:1.55;">
+                    Ключ задаётся в конфигурации сервера через переменную <code style="background:rgba(67,86,73,0.09);color:#1f2722;padding:2px 7px;border-radius:999px;">ADMIN_API_KEY</code>.
                 </p>
             </form>
         `;
+
+        const input = overlay.querySelector('#ws-auth-input');
+        input.addEventListener('focus', () => {
+            input.style.borderColor = 'rgba(67,86,73,0.6)';
+            input.style.background = '#fffdfa';
+            input.style.boxShadow = '0 0 0 0.24rem rgba(67,86,73,0.12)';
+        });
+        input.addEventListener('blur', () => {
+            input.style.borderColor = 'rgba(199,186,168,0.9)';
+            input.style.background = 'rgba(255,255,255,0.74)';
+            input.style.boxShadow = 'none';
+        });
+
+        const btn = overlay.querySelector('#ws-auth-submit');
+        btn.addEventListener('mouseenter', () => {
+            if (!btn.disabled) {
+                btn.style.transform = 'translateY(-1px)';
+                btn.style.boxShadow = '0 12px 24px rgba(48,37,25,0.15)';
+                btn.style.background = 'linear-gradient(135deg,#37463d,#223028)';
+            }
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.transform = '';
+            btn.style.boxShadow = '';
+            btn.style.background = 'linear-gradient(135deg,#435649,#2c3a31)';
+        });
+
         return overlay;
     }
 
@@ -135,7 +169,6 @@
     }
 
     async function verifyKey(candidate) {
-        // Bypass the wrapped fetch to avoid the global 401 interceptor here.
         const response = await originalFetch(VERIFY_URL, {
             headers: { [HEADER_NAME]: candidate }
         });
@@ -164,7 +197,6 @@
                 showLoginOverlay('Сохранённый ключ больше не действителен.');
             }
         } catch (err) {
-            // Server unreachable — don't block; app.js will surface the error.
             console.warn('Auth verify failed at bootstrap:', err);
         }
     }

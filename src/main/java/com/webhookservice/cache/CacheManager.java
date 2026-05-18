@@ -3,6 +3,8 @@ package com.webhookservice.cache;
 import com.webhookservice.config.AppConfig;
 import com.webhookservice.model.Webhook;
 import com.webhookservice.model.dto.StatsResponse;
+import com.webhookservice.template.CompiledTemplate;
+import com.webhookservice.template.CompiledTemplateCache;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
@@ -15,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** Facade for per-verticle Caffeine caches; uses Vert.x EventBus pub/sub for cross-verticle invalidation. */
 public final class CacheManager {
 
     private static final Logger log = LoggerFactory.getLogger(CacheManager.class);
@@ -26,8 +27,10 @@ public final class CacheManager {
     private final CaffeineCache<UUID, Webhook> webhookById;
     private final CaffeineCache<String, Boolean> negativeSlug;
     private final CaffeineCache<UUID, StatsResponse> stats;
+    private final CaffeineCache<String, CompiledTemplate> compiledTemplate;
     private final WebhookCache webhookCache;
     private final StatsCache statsCache;
+    private final CompiledTemplateCache compiledTemplateCache;
 
     private io.vertx.core.eventbus.MessageConsumer<CacheInvalidationEvent> consumer;
 
@@ -58,11 +61,18 @@ public final class CacheManager {
                 Duration.ofSeconds(config.cacheStatsTtlSeconds()),
                 enabled
         );
+        this.compiledTemplate = new CaffeineCache<>(
+                CacheNames.COMPILED_TEMPLATE,
+                config.cacheTemplateMaxSize(),
+                Duration.ofSeconds(config.cacheTemplateTtlSeconds()),
+                enabled
+        );
         this.webhookCache = new WebhookCache(webhookBySlug, webhookById, negativeSlug);
         this.statsCache = new StatsCache(stats);
-        log.info("CacheManager initialized: enabled={}, webhookMaxSize={}, ttl={}s, negativeTtl={}s, statsTtl={}s",
+        this.compiledTemplateCache = new CompiledTemplateCache(compiledTemplate);
+        log.info("CacheManager initialized: enabled={}, webhookMaxSize={}, ttl={}s, negativeTtl={}s, statsTtl={}s, templateTtl={}s",
                 enabled, config.cacheWebhookMaxSize(), config.cacheWebhookTtlSeconds(),
-                config.cacheNegativeTtlSeconds(), config.cacheStatsTtlSeconds());
+                config.cacheNegativeTtlSeconds(), config.cacheStatsTtlSeconds(), config.cacheTemplateTtlSeconds());
     }
 
     /** Register codec and subscribe to invalidation events. Call once per verticle. */
@@ -145,6 +155,7 @@ public final class CacheManager {
         webhookById.invalidateAll();
         negativeSlug.invalidateAll();
         stats.invalidateAll();
+        compiledTemplate.invalidateAll();
     }
 
     public WebhookCache webhookCache() {
@@ -153,6 +164,10 @@ public final class CacheManager {
 
     public StatsCache statsCache() {
         return statsCache;
+    }
+
+    public CompiledTemplateCache compiledTemplateCache() {
+        return compiledTemplateCache;
     }
 
     public boolean enabled() {
@@ -165,6 +180,7 @@ public final class CacheManager {
         caches.put(CacheNames.WEBHOOK_BY_ID, webhookById.snapshot());
         caches.put(CacheNames.NEGATIVE_SLUG, negativeSlug.snapshot());
         caches.put(CacheNames.STATS, stats.snapshot());
+        caches.put(CacheNames.COMPILED_TEMPLATE, compiledTemplate.snapshot());
         return new CacheMetricsSnapshot(enabled, caches);
     }
 

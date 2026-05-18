@@ -65,7 +65,7 @@ public class MainVerticle extends AbstractVerticle {
         );
         this.requestLogRepository = requestLogRepository;
         this.webhookService = webhookService;
-        var templateService = new TemplateService();
+        var templateService = new TemplateService(cacheManager.compiledTemplateCache());
         RetryPolicy retryPolicy = new RetryPolicy(
                 config.proxyMaxRetries(),
                 config.proxyRetryBaseDelayMs(),
@@ -93,7 +93,6 @@ public class MainVerticle extends AbstractVerticle {
         var apiKeyAuth = new ApiKeyAuthHandler(config.authEnabled(), config.adminApiKey());
 
         Router router = Router.router(vertx);
-        // BodyHandler on mutating methods only — keeps GETs and statics off the buffering path.
         BodyHandler bodyHandler = BodyHandler.create().setBodyLimit(1_048_576);
         router.post().handler(bodyHandler);
         router.put().handler(bodyHandler);
@@ -101,13 +100,11 @@ public class MainVerticle extends AbstractVerticle {
         router.delete().handler(bodyHandler);
         router.route().failureHandler(new ErrorHandler());
 
-        // Public: /api/health (healthchecks), /webhook/:slug (external callers — HMAC in Demo 6).
         router.get("/api/health").handler(ctx ->
                 ctx.response()
                         .putHeader("Content-Type", "application/json")
                         .end("{\"status\":\"UP\"}"));
 
-        // Protected admin namespaces — apiKeyAuth runs before concrete handlers.
         router.route("/api/webhooks*").handler(apiKeyAuth);
         router.route("/api/templates/*").handler(apiKeyAuth);
         router.route("/api/cache/*").handler(apiKeyAuth);
@@ -132,7 +129,6 @@ public class MainVerticle extends AbstractVerticle {
         router.get("/api/cache/stats").handler(cacheStatsHandler::stats);
         router.post("/api/cache/flush").handler(cacheStatsHandler::flush);
 
-        // If execution reaches this lambda, ApiKeyAuthHandler already verified the key.
         router.get("/api/auth/verify").handler(ctx ->
                 ctx.response()
                         .putHeader("Content-Type", "application/json")
