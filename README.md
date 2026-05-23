@@ -188,7 +188,7 @@ WebhookReceiverHandler
 |-----|------|-----|----------|------------|
 | `webhookBySlug` | slug (String) | 300 с | 10 000 | Основной горячий путь `/webhook/:slug` |
 | `webhookById` | UUID | 300 с | 10 000 | Lookup для CRUD-операций |
-| `webhookNegative` | slug (String) | 30 с | 5 000 | Защита от сканирования несуществующих slug |
+| `negativeSlug` | slug (String) | 30 с | 10 000 | Защита от сканирования несуществующих slug |
 | `stats` | webhookId | 30 с | 1 000 | Кэш агрегированной статистики |
 | `compiledTemplate` | SHA-256 строки шаблона | 1800 с | 1 000 | AST скомпилированных шаблонов |
 
@@ -213,10 +213,11 @@ curl -H "X-API-Key: password" http://localhost:8080/api/cache/stats
 # Пример ответа
 {
   "caches": {
-    "webhookBySlug": { "size": 42, "hitCount": 4999, "missCount": 1, "hitRatio": 0.9998, "evictionCount": 0 },
-    "webhookById":   { "size": 42, "hitCount": 112,  "missCount": 42, "hitRatio": 0.727,  "evictionCount": 0 },
-    "webhookNegative":{ "size": 3,  "hitCount": 97,   "missCount": 3,  "hitRatio": 0.97,   "evictionCount": 0 },
-    "stats":         { "size": 5,  "hitCount": 28,   "missCount": 5,  "hitRatio": 0.848,  "evictionCount": 0 }
+    "webhookBySlug":    { "size": 42, "hitCount": 4999, "missCount": 1, "hitRatio": 0.9998, "evictionCount": 0 },
+    "webhookById":      { "size": 42, "hitCount": 112,  "missCount": 42, "hitRatio": 0.727,  "evictionCount": 0 },
+    "negativeSlug":     { "size": 3,  "hitCount": 97,   "missCount": 3,  "hitRatio": 0.97,   "evictionCount": 0 },
+    "stats":            { "size": 5,  "hitCount": 28,   "missCount": 5,  "hitRatio": 0.848,  "evictionCount": 0 },
+    "compiledTemplate": { "size": 3,  "hitCount": 95,   "missCount": 3,  "hitRatio": 0.969,  "evictionCount": 0 }
   }
 }
 
@@ -227,17 +228,20 @@ curl -X POST -H "X-API-Key: password" http://localhost:8080/api/cache/flush
 **Как запустить smoke-benchmark:**
 
 ```bash
-# Создать тестовый вебхук
+# Создать тестовый вебхук (slug автогенерируется из name: "bench-hook" → "bench-hook")
 curl -s -X POST http://localhost:8080/api/webhooks \
   -H "Content-Type: application/json" \
   -H "X-API-Key: password" \
-  -d '{"name":"bench","slug":"bench-hook","allowedMethods":["POST"]}' | jq .
+  -d '{"name":"bench-hook","methods":"POST"}' | jq .
+
+# Создать файл с телом запроса для ab
+echo '{"test":true}' > /tmp/body.json
 
 # Снапшот ДО
 curl -s -H "X-API-Key: password" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
 
 # 5000 одинаковых запросов
-ab -n 5000 -c 50 -p body.json -T application/json http://localhost:8080/webhook/bench-hook
+ab -n 5000 -c 50 -p /tmp/body.json -T application/json http://localhost:8080/webhook/bench-hook
 
 # Снапшот ПОСЛЕ — hitRatio должен быть ≥ 0.99
 curl -s -H "X-API-Key: password" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
