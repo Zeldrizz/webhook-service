@@ -97,6 +97,14 @@ const API = {
             method: 'POST',
             body: JSON.stringify({ template, data })
         });
+    },
+
+    getCacheStats() {
+        return this.request('/cache/stats');
+    },
+
+    flushCache() {
+        return this.request('/cache/flush', { method: 'POST' });
     }
 };
 
