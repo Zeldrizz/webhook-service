@@ -56,16 +56,23 @@ public record CompiledTemplate(List<TemplateNode> nodes) {
         }
     }
 
-    public record IfNode(String path, List<TemplateNode> children) implements TemplateNode {
+    public record IfNode(String path, List<TemplateNode> children, List<TemplateNode> elseChildren) implements TemplateNode {
         public IfNode {
             path = path == null ? "" : path.trim();
             children = children == null ? List.of() : List.copyOf(children);
+            elseChildren = elseChildren == null ? List.of() : List.copyOf(elseChildren);
+        }
+
+        public IfNode(String path, List<TemplateNode> children) {
+            this(path, children, List.of());
         }
 
         @Override
         public void render(StringBuilder result, Map<String, Object> context) {
             if (isTruthy(resolvePath(context, path))) {
                 renderNodes(children, result, context);
+            } else {
+                renderNodes(elseChildren, result, context);
             }
         }
     }

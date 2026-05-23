@@ -46,9 +46,16 @@ public class TemplateCompiler {
             TagParts tag = splitTag(expression);
             if ("#if".equals(tag.marker())) {
                 requireArgument(tag, token.start(), source);
-                ParseResult inner = parseUntil(source, token.end(), "if", token.start());
-                nodes.add(new CompiledTemplate.IfNode(tag.argument(), inner.nodes()));
-                cursor = inner.end();
+                ParseResult thenResult = parseUntil(source, token.end(), "if", token.start());
+                List<CompiledTemplate.TemplateNode> elseNodes = List.of();
+                int blockEnd = thenResult.end();
+                if (thenResult.stoppedAtElse()) {
+                    ParseResult elseResult = parseUntil(source, thenResult.end(), "if", token.start());
+                    elseNodes = elseResult.nodes();
+                    blockEnd = elseResult.end();
+                }
+                nodes.add(new CompiledTemplate.IfNode(tag.argument(), thenResult.nodes(), elseNodes));
+                cursor = blockEnd;
                 continue;
             }
             if ("#each".equals(tag.marker())) {
@@ -60,6 +67,12 @@ public class TemplateCompiler {
             }
             if (tag.marker().startsWith("#")) {
                 throw error("Unsupported template block '{{" + tag.marker() + "}}'", token.start(), source);
+            }
+            if ("else".equals(tag.marker())) {
+                if (!"if".equals(expectedClose)) {
+                    throw error("Unexpected '{{else}}' outside of '{{#if}}' block", token.start(), source);
+                }
+                return new ParseResult(nodes, token.end(), true);
             }
             if (tag.marker().startsWith("/")) {
                 String close = tag.marker().substring(1);
@@ -277,7 +290,10 @@ public class TemplateCompiler {
     private record Token(TokenKind kind, int start, int end, String expression) {
     }
 
-    private record ParseResult(List<CompiledTemplate.TemplateNode> nodes, int end) {
+    private record ParseResult(List<CompiledTemplate.TemplateNode> nodes, int end, boolean stoppedAtElse) {
+        ParseResult(List<CompiledTemplate.TemplateNode> nodes, int end) {
+            this(nodes, end, false);
+        }
     }
 
     private record TagParts(String marker, String argument) {
