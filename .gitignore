@@ -32,5 +32,5 @@ logs/
 # Application
 application-local.yaml
 
-# Temp Ignore
-.github/
+# Load-test run artifacts (scripts are tracked, raw results are not)
+load-tests/results/
