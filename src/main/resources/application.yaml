@@ -33,7 +33,7 @@ webhook:
   cleanup-interval-hours: 24
 
 cache:
-  enabled: true
+  enabled: ${CACHE_ENABLED:true}
   webhook:
     max-size: 10000
     ttl-seconds: 300
