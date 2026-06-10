@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   db:
     image: postgres:16-alpine
@@ -27,7 +25,12 @@ services:
       DATABASE_URL: jdbc:postgresql://db:5432/webhooks
       DATABASE_USER: webhook_user
       DATABASE_PASSWORD: webhook_password
-      VERTICLE_INSTANCES: "1"
+      # Number of MainVerticle instances. Set to the CPU count (or leave "1" for
+      # a single event loop) — each instance owns its own per-verticle Caffeine cache.
+      VERTICLE_INSTANCES: "${VERTICLE_INSTANCES:-1}"
+      # Global cache toggle. Used by load-tests/run-all.sh to benchmark the same
+      # build with caching ON vs OFF without rebuilding the image.
+      CACHE_ENABLED: "${CACHE_ENABLED:-true}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -35,6 +38,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   pgdata:

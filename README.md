@@ -247,7 +247,40 @@ ab -n 5000 -c 50 -p /tmp/body.json -T application/json http://localhost:8080/web
 curl -s -H "X-API-Key: password" http://localhost:8080/api/cache/stats | jq '.caches.webhookBySlug'
 ```
 
-Для сравнения без кэша — пересобрать с `cache.enabled: false` в `application.yaml`.
+Для сравнения без кэша **пересобирать не нужно** — `cache.enabled` читается из env `CACHE_ENABLED`
+(`application.yaml`: `enabled: ${CACHE_ENABLED:true}`). Достаточно перезапустить контейнер:
+
+```bash
+CACHE_ENABLED=false docker compose up -d --force-recreate app
+```
+
+### Нагрузочное тестирование (k6) — полный цикл, Демо 6
+
+Полноценный load-test лежит в [`load-tests/`](load-tests/) и прогоняет три сценария **дважды** —
+с кэшем и без — на одном и том же образе, переключая `CACHE_ENABLED` без пересборки:
+
+| Сценарий | Файл | Что нагружает |
+|----------|------|---------------|
+| CRUD | `crud.js` | `/api/webhooks` create→get→list→toggle→delete (+ инвалидация) |
+| Hot path (simple) | `receiver_simple.js` | `/webhook/:slug` без proxy/логирования — чистый эффект кэша lookup'а |
+| Hot path (proxy+template) | `receiver_proxy_template.js` | `/webhook/:slug` с трансформацией шаблона и проксированием на mock-target |
+
+```bash
+cd load-tests
+./run-all.sh                 # 30s/сценарий; VUS=80 DURATION=60s ./run-all.sh для нагрузки потяжелее
+```
+
+Скрипт поднимает стек, гоняет k6, снимает `/api/cache/stats` до/после и собирает таблицы
+RPS / p50 / p95 / p99 / error-rate в **[`load-tests/RESULTS.md`](load-tests/RESULTS.md)**
+(cache ON vs OFF + анализ узких мест и вторая волна оптимизаций). Подробности запуска —
+[`load-tests/README.md`](load-tests/README.md).
+
+**Характеризация ёмкости и SLI/SLO/SLA.** Для ответа «какой максимальный RPS система держит
+стабильно и при каких параметрах» есть отдельный open-model свип
+[`load-tests/run-capacity.sh`](load-tests/run-capacity.sh): staircase (`constant-arrival-rate`)
++ soak + spike по матрице **cache {on,off} × verticles {1,2,4}**, с поиском точки насыщения и
+**max sustainable RPS @ SLO**. Результаты и рекомендованные SLI/SLO/SLA —
+**[`load-tests/CAPACITY.md`](load-tests/CAPACITY.md)**.
 
 ### Batch insert для логов
 
@@ -352,16 +385,57 @@ ADMIN_API_KEY=my-secret-key java -jar target/webhook-service.jar
 ## Docker
 
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
+
+- **Multi-stage сборка** (`Dockerfile`): Maven-build → JRE-runtime, на выходе fat JAR.
+- **Container-aware JVM** (Демо 6): `JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"` —
+  heap масштабируется от cgroup-лимита контейнера, G1GC держит низкий p99 под нагрузкой,
+  OOM приводит к рестарту инстанса вместо «зомби».
+- **Healthcheck** на обоих сервисах: `db` через `pg_isready`, `app` через `curl /api/health`.
+  `app` стартует только после `db: service_healthy`.
+- Переключатели через env: `CACHE_ENABLED` (toggle кэша), `VERTICLE_INSTANCES` (число event loop),
+  `ADMIN_API_KEY` (admin-ключ).
 
 ## Тестирование
 
 ```bash
-mvn test              # Все тесты
-mvn compile           # Только компиляция
-mvn package -DskipTests  # Сборка JAR
+mvn test                 # Все тесты + JaCoCo-отчёт (target/site/jacoco/)
+mvn verify               # Полный цикл: тесты + fat JAR
+mvn compile              # Только компиляция
+mvn package -DskipTests  # Сборка JAR без тестов
 ```
+
+**Покрытие:** `mvn test` автоматически запускает JaCoCo (`prepare-agent` + `report`).
+HTML-отчёт — `target/site/jacoco/index.html`, CSV — `target/site/jacoco/jacoco.csv`.
+Ориентир Демо 6: **30–40% line coverage** по backend / **65–75%** по критичным flow
+(фактически на момент защиты — ~57% line, ~49% branch при 161 зелёном тесте).
+
+## CI/CD (GitHub Actions)
+
+`.github/workflows/ci.yml` — на каждый push/PR в `main`/`develop`:
+
+1. **build-and-test** — `mvn -B clean verify` на JDK 21 (Temurin), с Maven-кэшем.
+   Прогоняет unit- и Testcontainers-интеграционные тесты (Docker на `ubuntu-latest` доступен),
+   собирает fat JAR и JaCoCo-отчёт. Артефакты — coverage-отчёт и surefire-reports — загружаются
+   через `actions/upload-artifact`.
+2. **docker** — после успешных тестов собирает Docker-образ (`docker build`), проверяя что
+   multi-stage Dockerfile валиден.
+
+> Прежний `ci.yml` вызывал `mvn jacoco:report` и `mvn checkstyle:check` при не подключённых
+> плагинах — отчёт получался пустым, а `checkstyle:check` падал без конфигурации. К Демо 6
+> добавлен `jacoco-maven-plugin` (через `@{argLine}` в surefire), а CI приведён к рабочему виду.
+
+### Релизы и защита main
+
+`.github/workflows/release.yml` — на push в `main` [release-please](https://github.com/googleapis/release-please)
+по Conventional Commits ведёт «Release PR» и считает следующую версию (`fix:`→patch, `feat:`→minor,
+`feat!:`/`BREAKING CHANGE`→major). При мёрже Release PR создаётся тег `vX.Y.Z`, GitHub Release,
+CHANGELOG; fat JAR прикладывается к релизу, а Docker-образ пушится в **GHCR** (`:X.Y.Z` и `:latest`).
+
+Запрет прямого пуша в `main` и обязательные проверки (`build-and-test`, `docker`) перед мёржем —
+это настройка ruleset репозитория на GitHub (не YAML). Команда `gh`, готовый ruleset и детали
+версионирования — в [`.github/RELEASE_AND_PROTECTION.md`](.github/RELEASE_AND_PROTECTION.md).
 
 ## Структура проекта
 
@@ -410,6 +484,16 @@ webhook-service/
 │   ├── service/                       # Тесты сервисов
 │   ├── handler/                       # Тесты обработчиков
 │   └── auth/                          # Тесты ApiKeyAuthHandler
+├── load-tests/                       # k6 нагрузочные тесты (Демо 6)
+│   ├── lib/common.js                 # Общий конфиг + handleSummary
+│   ├── crud.js                       # Сценарий 1: CRUD
+│   ├── receiver_simple.js            # Сценарий 2: hot path без proxy
+│   ├── receiver_proxy_template.js    # Сценарий 3: hot path + template + proxy
+│   ├── mock-target.js                # Node upstream для proxy-сценария
+│   ├── run-all.sh                    # Прогон cache ON/OFF + сбор таблиц
+│   ├── gen-report.js                 # Агрегация results/*.json в markdown
+│   └── RESULTS.md                    # Результаты + анализ узких мест
+├── .github/workflows/ci.yml          # CI/CD pipeline
 ├── pom.xml
 ├── Dockerfile
 ├── docker-compose.yml
