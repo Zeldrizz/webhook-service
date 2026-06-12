@@ -82,7 +82,7 @@ jobs:
           curl -fsS http://localhost:8080/api/health
 
       - name: Run SLO check (k6 thresholds)
-        run: k6 run load-tests/ci-check.js
+        run: cd load-tests && k6 run ci-check.js
 
       - name: Stop stack
         if: always()
