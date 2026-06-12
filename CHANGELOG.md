@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/Zeldrizz/webhook-service/compare/v1.0.0...v1.1.0) (2026-06-12)
+
+
+### Features
+
+* add monitoring, metrics collecting, per-webhook CB, CI SLO check ([#5](https://github.com/Zeldrizz/webhook-service/issues/5)) ([59a7559](https://github.com/Zeldrizz/webhook-service/commit/59a75594d5f8028825fc024986540df1620e3bc1))
+
 ## 1.0.0 (2026-06-10)
 
 
