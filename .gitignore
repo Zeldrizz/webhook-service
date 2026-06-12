@@ -33,4 +33,4 @@ logs/
 application-local.yaml
 
 # Load-test run artifacts (scripts are tracked, raw results are not)
-load-tests/results/
+load-tests/results/demo/.state

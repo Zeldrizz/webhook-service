@@ -1,0 +1,1491 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Webhook Service \u2014 throughput, latency, cache efficiency, proxy health and live logs",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{slug=~\"$slug\"}[5m]))",
+          "instant": true,
+          "legendFormat": "RPS",
+          "refId": "A"
+        }
+      ],
+      "title": "Throughput (RPS)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{status=~\"2..\",slug=~\"$slug\"}[5m])) / sum(rate(webhook_requests_total{slug=~\"$slug\"}[5m])) * 100",
+          "instant": true,
+          "legendFormat": "Success %",
+          "refId": "A"
+        }
+      ],
+      "title": "Success Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{status=~\"[45]..\",slug=~\"$slug\"}[5m])) / sum(rate(webhook_requests_total{slug=~\"$slug\"}[5m])) * 100",
+          "instant": true,
+          "legendFormat": "Error %",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(webhook_request_duration_seconds_bucket{slug=~\"$slug\"}[5m])) by (le)) * 1000",
+          "instant": true,
+          "legendFormat": "p99",
+          "refId": "A"
+        }
+      ],
+      "title": "p99 Latency (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 150
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(webhook_request_duration_seconds_bucket{slug=~\"$slug\"}[5m])) by (le)) * 1000",
+          "instant": true,
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ],
+      "title": "p95 Latency (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_cache_hits_total[5m])) / (sum(rate(webhook_cache_hits_total[5m])) + sum(rate(webhook_cache_misses_total[5m]))) * 100",
+          "instant": true,
+          "legendFormat": "Hit %",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Hit Rate (5m)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "title": "Throughput & Availability",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "2xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "4xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "5xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{status=~\"2..\",slug=~\"$slug\"}[$__rate_interval]))",
+          "legendFormat": "2xx",
+          "refId": "2xx"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{status=~\"4..\",slug=~\"$slug\"}[$__rate_interval]))",
+          "legendFormat": "4xx",
+          "refId": "4xx"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{status=~\"5..\",slug=~\"$slug\"}[$__rate_interval]))",
+          "legendFormat": "5xx",
+          "refId": "5xx"
+        }
+      ],
+      "title": "Request Rate by Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_requests_total{status=~\"[45]..\",slug=~\"$slug\"}[$__rate_interval])) / sum(rate(webhook_requests_total{slug=~\"$slug\"}[$__rate_interval])) * 100",
+          "legendFormat": "Error %",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Rate %",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 20,
+      "title": "Latency",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 14
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum(rate(webhook_request_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.90, sum(rate(webhook_request_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p90",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(webhook_request_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p95",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(webhook_request_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p99",
+          "refId": "D"
+        }
+      ],
+      "title": "Request Latency Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (slug) (rate(webhook_requests_total{slug=~\"$slug\"}[$__rate_interval]))",
+          "legendFormat": "{{slug}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Request Rate by Webhook",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 30,
+      "title": "Cache Performance",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(webhook_cache_hits_total[$__rate_interval]) / (rate(webhook_cache_hits_total[$__rate_interval]) + rate(webhook_cache_misses_total[$__rate_interval])) * 100",
+          "legendFormat": "{{cache}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Hit Rate by Cache",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 23
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "webhook_cache_size",
+          "legendFormat": "{{cache}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Entry Count",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 23
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (cache) (rate(webhook_cache_evictions_total[$__rate_interval]))",
+          "legendFormat": "{{cache}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Eviction Rate",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 40,
+      "title": "Proxy & Circuit Breaker",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 70,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "CLOSED"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "OPEN"
+                },
+                "2": {
+                  "color": "yellow",
+                  "index": 2,
+                  "text": "HALF-OPEN"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "id": 41,
+      "options": {
+        "mergeValues": true,
+        "showValue": "always",
+        "alignValue": "center",
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "webhook_circuit_breaker_state",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Circuit Breaker State",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 32
+      },
+      "id": 42,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_proxy_requests_total{upstream_status=~\"2..\",slug=~\"$slug\"}[5m])) / sum(rate(webhook_proxy_requests_total{slug=~\"$slug\"}[5m])) * 100",
+          "instant": true,
+          "legendFormat": "Success %",
+          "refId": "A"
+        }
+      ],
+      "title": "Proxy Success Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 32
+      },
+      "id": 43,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_proxy_retries_total{slug=~\"$slug\"}[5m]))",
+          "instant": true,
+          "legendFormat": "Retries/s",
+          "refId": "A"
+        }
+      ],
+      "title": "Proxy Retry Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 32
+      },
+      "id": 44,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_proxy_requests_total{upstream_status=~\"5..\",slug=~\"$slug\"}[5m]))",
+          "instant": true,
+          "legendFormat": "Upstream 5xx/s",
+          "refId": "A"
+        }
+      ],
+      "title": "Upstream Error Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 32
+      },
+      "id": 45,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(webhook_proxy_duration_seconds_bucket{slug=~\"$slug\"}[5m])) by (le)) * 1000",
+          "instant": true,
+          "legendFormat": "p99",
+          "refId": "A"
+        }
+      ],
+      "title": "Proxy p99 Latency (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 46,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum(rate(webhook_proxy_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(webhook_proxy_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(webhook_proxy_duration_seconds_bucket{slug=~\"$slug\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Proxy Upstream Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 47,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (upstream_status) (rate(webhook_proxy_requests_total{slug=~\"$slug\"}[$__rate_interval]))",
+          "legendFormat": "HTTP {{upstream_status}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webhook_proxy_retries_total{slug=~\"$slug\"}[$__rate_interval]))",
+          "legendFormat": "retries",
+          "refId": "B"
+        }
+      ],
+      "title": "Proxy Rate & Retries",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": [
+    "webhook-service",
+    "business"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(webhook_requests_total, slug)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "slug",
+        "label": "Webhook Slug",
+        "options": [],
+        "query": {
+          "query": "label_values(webhook_requests_total, slug)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Webhook Service \u2014 Business",
+  "uid": "webhook-business",
+  "version": 1,
+  "weekStart": ""
+}

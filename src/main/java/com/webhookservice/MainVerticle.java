@@ -9,6 +9,7 @@ import com.webhookservice.handler.RequestLogHandler;
 import com.webhookservice.handler.TemplateHandler;
 import com.webhookservice.handler.WebhookApiHandler;
 import com.webhookservice.handler.WebhookReceiverHandler;
+import com.webhookservice.metrics.WebhookMetrics;
 import com.webhookservice.repository.impl.PgRequestLogRepository;
 import com.webhookservice.repository.impl.PgWebhookRepository;
 import com.webhookservice.service.ProxyService;
@@ -18,6 +19,7 @@ import com.webhookservice.service.TemplateService;
 import com.webhookservice.service.WebhookService;
 import com.webhookservice.util.DatabaseManager;
 import com.webhookservice.repository.RequestLogRepository;
+import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
@@ -25,6 +27,7 @@ import io.vertx.core.http.HttpServerOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
+import io.vertx.micrometer.backends.BackendRegistries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +57,12 @@ public class MainVerticle extends AbstractVerticle {
         cacheManager = new CacheManager(vertx, config);
         cacheManager.installEventBusConsumer(vertx.eventBus());
 
+        WebhookMetrics metrics = null;
+        if (BackendRegistries.getDefaultNow() instanceof PrometheusMeterRegistry reg) {
+            metrics = new WebhookMetrics(reg);
+            metrics.registerCacheMetrics(cacheManager);
+        }
+
         var webhookService = new WebhookService(webhookRepository, cacheManager);
         requestLogService = new RequestLogService(
                 requestLogRepository,
@@ -61,7 +70,8 @@ public class MainVerticle extends AbstractVerticle {
                 cacheManager.statsCache(),
                 config.requestLogBatchEnabled(),
                 config.requestLogBatchMaxSize(),
-                config.requestLogBatchFlushMs()
+                config.requestLogBatchFlushMs(),
+                metrics
         );
         this.requestLogRepository = requestLogRepository;
         this.webhookService = webhookService;
@@ -81,13 +91,13 @@ public class MainVerticle extends AbstractVerticle {
                 config.proxyCircuitBreakerEnabled(),
                 config.proxyCircuitBreakerMaxFailures(),
                 config.proxyCircuitBreakerResetMs(),
-                config.proxyCircuitBreakerTimeoutMs()
+                config.proxyCircuitBreakerTimeoutMs(),
+                metrics
         );
-
         String baseUrl = "http://localhost:" + config.serverPort();
         var webhookApiHandler = new WebhookApiHandler(webhookService, baseUrl);
         var requestLogHandler = new RequestLogHandler(webhookService, requestLogService);
-        var webhookReceiverHandler = new WebhookReceiverHandler(webhookService, requestLogService, proxyService, templateService);
+        var webhookReceiverHandler = new WebhookReceiverHandler(webhookService, requestLogService, proxyService, templateService, metrics);
         var templateHandler = new TemplateHandler(templateService);
         var cacheStatsHandler = new CacheStatsHandler(cacheManager);
         var apiKeyAuth = new ApiKeyAuthHandler(config.authEnabled(), config.adminApiKey());
@@ -104,6 +114,17 @@ public class MainVerticle extends AbstractVerticle {
                 ctx.response()
                         .putHeader("Content-Type", "application/json")
                         .end("{\"status\":\"UP\"}"));
+
+        // Prometheus scrape endpoint — public (no auth), same as /api/health.
+        router.get("/metrics").handler(ctx -> {
+            if (BackendRegistries.getDefaultNow() instanceof PrometheusMeterRegistry pmr) {
+                ctx.response()
+                        .putHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+                        .end(pmr.scrape());
+            } else {
+                ctx.response().setStatusCode(503).end("Metrics unavailable");
+            }
+        });
 
         router.route("/api/webhooks*").handler(apiKeyAuth);
         router.route("/api/templates/*").handler(apiKeyAuth);

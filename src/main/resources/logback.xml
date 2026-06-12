@@ -6,6 +6,7 @@
         </encoder>
     </appender>
 
+    <!-- Plain-text rolling file for local debugging (human-readable). -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/webhook-service.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">

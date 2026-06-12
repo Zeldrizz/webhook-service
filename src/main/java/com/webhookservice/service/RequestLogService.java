@@ -1,6 +1,7 @@
 package com.webhookservice.service;
 
 import com.webhookservice.cache.StatsCache;
+import com.webhookservice.metrics.WebhookMetrics;
 import com.webhookservice.model.RequestLog;
 import com.webhookservice.model.dto.Page;
 import com.webhookservice.model.dto.StatsResponse;
@@ -43,12 +44,14 @@ public class RequestLogService {
     private final AtomicInteger pendingSize;
     private final Object trimLock = new Object();
     private volatile long flushTimerId = -1L;
+    private final WebhookMetrics metrics;
 
-    /** Legacy ctor: batching + caching off. */
+    /** Legacy ctor: batching + caching off, no metrics. */
     public RequestLogService(RequestLogRepository requestLogRepository) {
-        this(requestLogRepository, null, null, false, 0, 0L);
+        this(requestLogRepository, null, null, false, 0, 0L, null);
     }
 
+    /** Backward-compatible constructor for tests (no metrics). */
     public RequestLogService(
             RequestLogRepository requestLogRepository,
             Vertx vertx,
@@ -57,9 +60,22 @@ public class RequestLogService {
             int batchMaxSize,
             long batchFlushMs
     ) {
+        this(requestLogRepository, vertx, statsCache, batchEnabled, batchMaxSize, batchFlushMs, null);
+    }
+
+    public RequestLogService(
+            RequestLogRepository requestLogRepository,
+            Vertx vertx,
+            StatsCache statsCache,
+            boolean batchEnabled,
+            int batchMaxSize,
+            long batchFlushMs,
+            WebhookMetrics metrics
+    ) {
         this.requestLogRepository = Objects.requireNonNull(requestLogRepository, "requestLogRepository");
         this.vertx = vertx;
         this.statsCache = statsCache;
+        this.metrics = metrics;
         this.batchEnabled = batchEnabled && vertx != null && batchMaxSize > 0 && batchFlushMs > 0;
         this.batchMaxSize = batchMaxSize;
         this.batchFlushMs = batchFlushMs;
@@ -68,6 +84,9 @@ public class RequestLogService {
         this.pendingSize = new AtomicInteger(0);
         if (this.batchEnabled) {
             startFlushTimer();
+        }
+        if (metrics != null) {
+            metrics.registerBatchQueue(this.pendingSize);
         }
     }
 
@@ -162,11 +181,23 @@ public class RequestLogService {
             return Future.succeededFuture();
         }
         Map<UUID, Integer> trimDirectives = snapshotTrimDirectives();
+        int batchSize = batch.size();
+        long startNs = System.nanoTime();
 
         return requestLogRepository.saveBatch(batch)
                 .compose(ignored -> trimAffected(trimDirectives))
-                .onSuccess(v -> log.debug("Flushed {} pending request logs", batch.size()))
-                .onFailure(err -> log.warn("Batch flush of {} logs failed: {}", batch.size(), err.getMessage()));
+                .onSuccess(v -> {
+                    log.debug("Flushed {} pending request logs", batchSize);
+                    if (metrics != null) {
+                        metrics.recordBatchFlush(batchSize, (System.nanoTime() - startNs) / 1_000_000, true);
+                    }
+                })
+                .onFailure(err -> {
+                    log.warn("Batch flush of {} logs failed: {}", batchSize, err.getMessage());
+                    if (metrics != null) {
+                        metrics.recordBatchFlush(batchSize, (System.nanoTime() - startNs) / 1_000_000, false);
+                    }
+                });
     }
 
     private List<RequestLog> drainAll() {
