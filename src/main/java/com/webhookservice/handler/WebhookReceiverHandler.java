@@ -1,5 +1,6 @@
 package com.webhookservice.handler;
 
+import com.webhookservice.metrics.WebhookMetrics;
 import com.webhookservice.model.RequestLog;
 import com.webhookservice.model.Webhook;
 import com.webhookservice.service.ProxyService;
@@ -8,6 +9,7 @@ import com.webhookservice.service.TemplateService;
 import com.webhookservice.service.WebhookService;
 import com.webhookservice.util.IdGenerator;
 import com.webhookservice.util.JsonUtil;
+import io.vertx.core.Future;
 import io.vertx.core.MultiMap;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
@@ -27,34 +29,50 @@ public class WebhookReceiverHandler {
     private final RequestLogService requestLogService;
     private final ProxyService proxyService;
     private final TemplateService templateService;
+    private final WebhookMetrics metrics;
 
+    /** Backward-compatible constructor for tests (no metrics). */
     public WebhookReceiverHandler(
             WebhookService webhookService,
             RequestLogService requestLogService,
             ProxyService proxyService,
             TemplateService templateService
     ) {
+        this(webhookService, requestLogService, proxyService, templateService, null);
+    }
+
+    public WebhookReceiverHandler(
+            WebhookService webhookService,
+            RequestLogService requestLogService,
+            ProxyService proxyService,
+            TemplateService templateService,
+            WebhookMetrics metrics
+    ) {
         this.webhookService = webhookService;
         this.requestLogService = requestLogService;
         this.proxyService = proxyService;
         this.templateService = templateService;
+        this.metrics = metrics;
     }
 
     public void handle(RoutingContext ctx) {
         String slug = ctx.pathParam("slug");
+        long startNs = System.nanoTime();
+        String requestMethod = ctx.request().method().name();
 
         webhookService.getBySlug(slug)
                 .onSuccess(webhook -> {
                     if (webhook == null) {
                         ErrorHandler.sendNotFound(ctx, "Webhook");
+                        record(slug, requestMethod, 404, startNs);
                         return;
                     }
                     if (!webhook.isActive()) {
                         ErrorHandler.sendError(ctx, 409, "Webhook is inactive");
+                        record(slug, requestMethod, 409, startNs);
                         return;
                     }
 
-                    String requestMethod = ctx.request().method().name();
                     if (!isMethodAllowed(webhook, requestMethod)) {
                         ctx.response()
                                 .setStatusCode(405)
@@ -65,6 +83,7 @@ public class WebhookReceiverHandler {
                                         "message", "Method not allowed",
                                         "allowedMethods", normalizeMethods(webhook.methods())
                                 )));
+                        record(slug, requestMethod, 405, startNs);
                         return;
                     }
 
@@ -77,14 +96,29 @@ public class WebhookReceiverHandler {
                                     proxyLog.responseStatus(),
                                     proxyLog.proxyResponse(),
                                     proxyLog.proxyDurationMs()))
-                            .compose(finalLog -> requestLogService.save(finalLog, webhook.maxLogCount()))
+                            .compose(finalLog -> webhook.debugMode()
+                            ? requestLogService.save(finalLog, webhook.maxLogCount())
+                            : Future.succeededFuture(finalLog))
                             .onSuccess(savedLog -> {
                                 log.info("Webhook received: slug={}, requestId={}, method={}", webhook.slug(), savedLog.id(), requestMethod);
                                 sendReceiverResponse(ctx, webhook, savedLog);
+                                record(slug, requestMethod, ctx.response().getStatusCode(), startNs);
                             })
-                            .onFailure(ctx::fail);
+                            .onFailure(err -> {
+                                ctx.fail(err);
+                                record(slug, requestMethod, 500, startNs);
+                            });
                 })
-                .onFailure(ctx::fail);
+                .onFailure(err -> {
+                    ctx.fail(err);
+                    record(slug, requestMethod, 500, startNs);
+                });
+    }
+
+    private void record(String slug, String method, int status, long startNs) {
+        if (metrics != null) {
+            metrics.recordReceive(slug, method, status, (System.nanoTime() - startNs) / 1_000_000);
+        }
     }
 
     private RequestLog buildRequestLog(RoutingContext ctx, UUID webhookId) {
