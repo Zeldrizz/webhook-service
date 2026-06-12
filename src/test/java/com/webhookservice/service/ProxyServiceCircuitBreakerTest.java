@@ -74,7 +74,7 @@ class ProxyServiceCircuitBreakerTest {
             Thread.sleep(50);
         }
         assertEquals(3, done.get(), "all probes should complete in time");
-        assertTrue(proxy.isCircuitOpen(), "circuit must be open after threshold failures");
+        assertTrue(proxy.isCircuitOpen(webhook.slug()), "circuit must be open after threshold failures");
         proxy.close();
         tc.completeNow();
     }
