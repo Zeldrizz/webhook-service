@@ -128,7 +128,18 @@
             <version>${logback.version}</version>
         </dependency>
 
+        <!-- Observability: Prometheus metrics via Vert.x Micrometer -->
         <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-micrometer-metrics</artifactId>
+            <version>${vertx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>1.12.4</version>
+        </dependency>
+<dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>

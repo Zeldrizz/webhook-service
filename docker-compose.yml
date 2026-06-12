@@ -6,6 +6,19 @@ services:
       POSTGRES_DB: webhooks
       POSTGRES_USER: webhook_user
       POSTGRES_PASSWORD: webhook_password
+    # Performance tuning for high-throughput workloads.
+    # synchronous_commit=off eliminates per-write WAL flush latency (acceptable
+    # for a webhook service — at most the last ~100ms of commits lost on crash,
+    # and clients retry). All other settings size buffers to the container.
+    command: >
+      postgres
+      -c synchronous_commit=off
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c work_mem=16MB
+      -c wal_buffers=16MB
+      -c checkpoint_completion_target=0.9
+      -c max_connections=200
     ports:
       - "5432:5432"
     volumes:
@@ -21,6 +34,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: webhook-service
+    cpuset: "0-3"
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/webhooks
       DATABASE_USER: webhook_user
@@ -45,6 +59,38 @@ services:
       retries: 5
       start_period: 20s
 
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: webhook-prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: webhook-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
+    driver: local
+  grafana_data:
     driver: local
