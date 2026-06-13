@@ -1,12 +1,13 @@
 // CI SLO gate — self-contained, no lib/ imports.
-// Constant-arrival-rate at TARGET_RPS for 60s.
-// Fails build if p99 > 50ms or error rate > 0.1% (matches load-test SLO budget).
+// Runs at TARGET_RPS for 60s on a shared CI runner (default 200 RPS).
+// Full capacity sweep (1000 RPS) is run locally via load-tests/scenarios/.
+// Fails build if p99 > 50ms or error rate > 0.1%.
 import { check } from 'k6';
 import http from 'k6/http';
 
 const BASE = __ENV.BASE_URL || 'http://localhost:8080';
 const API_KEY = __ENV.API_KEY || 'password';
-const TARGET_RPS = Number(__ENV.TARGET_RPS || 1000);
+const TARGET_RPS = Number(__ENV.TARGET_RPS || 200);
 
 export const options = {
   scenarios: {
@@ -15,8 +16,8 @@ export const options = {
       rate: TARGET_RPS,
       timeUnit: '1s',
       duration: '60s',
-      preAllocatedVUs: 100,
-      maxVUs: 500,
+      preAllocatedVUs: 50,
+      maxVUs: 200,
     },
   },
   thresholds: {
