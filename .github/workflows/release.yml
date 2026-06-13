@@ -32,8 +32,9 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: rp
         with:
-          release-type: maven
           token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   publish:
     name: Publish JAR + Docker image
