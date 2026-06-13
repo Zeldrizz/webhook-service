@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Zeldrizz/webhook-service/compare/v1.1.0...v1.2.0) (2026-06-13)
+
+
+### Features
+
+* add load testing suite and demo scripts ([1c7338c](https://github.com/Zeldrizz/webhook-service/commit/1c7338cd859e243814a9cf5a305bd1969294febc))
+
 ## [1.1.0](https://github.com/Zeldrizz/webhook-service/compare/v1.0.0...v1.1.0) (2026-06-12)
 
 
