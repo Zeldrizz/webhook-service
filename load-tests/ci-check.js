@@ -1,26 +1,27 @@
-// CI smoke / SLO gate — self-contained, no lib/ imports.
-// Runs 200 RPS for 30s. Fails build if p99 > 200ms or error rate > 1%.
+// CI SLO gate — self-contained, no lib/ imports.
+// Constant-arrival-rate at TARGET_RPS for 60s.
+// Fails build if p99 > 50ms or error rate > 0.1% (matches load-test SLO budget).
 import { check } from 'k6';
 import http from 'k6/http';
 
 const BASE = __ENV.BASE_URL || 'http://localhost:8080';
 const API_KEY = __ENV.API_KEY || 'password';
-const TARGET_RPS = Number(__ENV.TARGET_RPS || 200);
+const TARGET_RPS = Number(__ENV.TARGET_RPS || 1000);
 
 export const options = {
   scenarios: {
-    smoke: {
+    slo: {
       executor: 'constant-arrival-rate',
       rate: TARGET_RPS,
       timeUnit: '1s',
-      duration: '30s',
-      preAllocatedVUs: 50,
-      maxVUs: 200,
+      duration: '60s',
+      preAllocatedVUs: 100,
+      maxVUs: 500,
     },
   },
   thresholds: {
-    http_req_duration: ['p(99)<200'],
-    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(99)<50'],
+    http_req_failed: ['rate<0.001'],
   },
 };
 
