@@ -24,6 +24,21 @@ public interface RequestLogRepository {
 
     Future<Page<RequestLog>> findByWebhookId(UUID webhookId, int page, int size);
 
+    default Future<Page<RequestLog>> findByWebhookId(
+            UUID webhookId,
+            int page,
+            int size,
+            String method,
+            String statusFilter
+    ) {
+        boolean noMethodFilter = method == null || method.isBlank();
+        boolean noStatusFilter = statusFilter == null || statusFilter.isBlank() || "all".equals(statusFilter);
+        if (noMethodFilter && noStatusFilter) {
+            return findByWebhookId(webhookId, page, size);
+        }
+        return Future.failedFuture(new UnsupportedOperationException("Filtered request log lookup is not implemented"));
+    }
+
     Future<Optional<RequestLog>> findByWebhookIdAndId(UUID webhookId, UUID requestId);
 
     Future<Long> deleteByWebhookId(UUID webhookId);

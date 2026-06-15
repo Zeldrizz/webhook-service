@@ -36,16 +36,6 @@ public class PgRequestLogRepository implements RequestLogRepository {
             VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13)
             """;
 
-    private static final String SELECT_PAGE_SQL = """
-            SELECT id, webhook_id, received_at, method, url, query_params, headers,
-                   body, content_type, source_ip, response_status, proxy_response, proxy_duration_ms,
-                   COUNT(*) OVER() AS total_count
-            FROM request_logs
-            WHERE webhook_id = $1
-            ORDER BY received_at DESC, id DESC
-            LIMIT $2 OFFSET $3
-            """;
-
     private static final String SELECT_BY_ID_SQL = """
             SELECT id, webhook_id, received_at, method, url, query_params, headers,
                    body, content_type, source_ip, response_status, proxy_response, proxy_duration_ms
@@ -112,9 +102,21 @@ public class PgRequestLogRepository implements RequestLogRepository {
 
     @Override
     public Future<Page<RequestLog>> findByWebhookId(UUID webhookId, int page, int size) {
+        return findByWebhookId(webhookId, page, size, null, null);
+    }
+
+    @Override
+    public Future<Page<RequestLog>> findByWebhookId(
+            UUID webhookId,
+            int page,
+            int size,
+            String method,
+            String statusFilter
+    ) {
         int offset = page * size;
-        return pool.preparedQuery(SELECT_PAGE_SQL)
-                .execute(Tuple.of(webhookId, size, offset))
+        QueryWithParams query = buildPageQuery(webhookId, method, statusFilter, size, offset);
+        return pool.preparedQuery(query.sql())
+                .execute(query.params())
                 .map(rs -> {
                     List<RequestLog> items = new ArrayList<>(rs.size());
                     long total = 0;
@@ -210,6 +212,50 @@ public class PgRequestLogRepository implements RequestLogRepository {
          .addValue(r.proxyDurationMs());
     }
 
+    private QueryWithParams buildPageQuery(UUID webhookId, String method, String statusFilter, int size, int offset) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, webhook_id, received_at, method, url, query_params, headers,
+                       body, content_type, source_ip, response_status, proxy_response, proxy_duration_ms,
+                       COUNT(*) OVER() AS total_count
+                FROM request_logs
+                WHERE webhook_id = $1
+                """);
+        Tuple params = Tuple.tuple();
+        params.addValue(webhookId);
+        int index = 2;
+
+        if (method != null && !method.isBlank() && !"all".equals(method)) {
+            sql.append(" AND method = $").append(index);
+            params.addValue(method);
+            index++;
+        }
+
+        if (statusFilter != null && !statusFilter.isBlank() && !"all".equals(statusFilter)) {
+            if ("none".equals(statusFilter)) {
+                sql.append(" AND response_status IS NULL");
+            } else if (statusFilter.endsWith("xx") && statusFilter.length() == 3) {
+                int floor = Character.digit(statusFilter.charAt(0), 10) * 100;
+                sql.append(" AND response_status >= $").append(index)
+                        .append(" AND response_status < $").append(index + 1);
+                params.addValue(floor);
+                params.addValue(floor + 100);
+                index += 2;
+            } else {
+                sql.append(" AND response_status = $").append(index);
+                params.addValue(Integer.parseInt(statusFilter));
+                index++;
+            }
+        }
+
+        sql.append(" ORDER BY received_at DESC, id DESC LIMIT $")
+                .append(index)
+                .append(" OFFSET $")
+                .append(index + 1);
+        params.addValue(size);
+        params.addValue(offset);
+        return new QueryWithParams(sql.toString(), params);
+    }
+
     private RequestLog mapRow(Row row) {
         Object qp = row.getValue("query_params");
         Object hd = row.getValue("headers");
@@ -229,5 +275,8 @@ public class PgRequestLogRepository implements RequestLogRepository {
                 row.getString("proxy_response"),
                 row.getLong("proxy_duration_ms")
         );
+    }
+
+    private record QueryWithParams(String sql, Tuple params) {
     }
 }
