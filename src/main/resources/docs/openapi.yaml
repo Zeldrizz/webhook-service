@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Dynamic Webhook Service API
-  version: 1.0.2-demo5
+  version: 1.0.2-demo6
   description: |
     API для управления динамическими вебхуками, логами запросов, шаблонами и кэшами.
 
@@ -10,6 +10,8 @@ info:
     - условия: `{{#if body.urgent}}...{{/if}}`;
     - циклы: `{{#each body.items}}...{{/each}}`;
     - fallback/default values: `{{body.user.name | "Anonymous"}}`;
+    - альтернативный fallback-оператор: `{{body.user.name ?? "Anonymous"}}`;
+    - metadata внутри циклов: `{{@index}}`, `{{@first}}`, `{{@last}}`, `{{@key}}`;
     - диагностику preview-ошибок со строкой, колонкой и snippet.
 servers:
   - url: http://localhost:8080
@@ -19,6 +21,8 @@ security:
 tags:
   - name: health
     description: Service health checks
+  - name: auth
+    description: Проверка admin API key
   - name: webhooks
     description: CRUD для вебхуков
   - name: requests
@@ -29,6 +33,8 @@ tags:
     description: Метрики и ручной сброс кэшей
   - name: receiver
     description: Динамические endpoint'ы вебхуков
+  - name: metrics
+    description: Prometheus metrics endpoint
 paths:
   /api/health:
     get:
@@ -38,6 +44,39 @@ paths:
       responses:
         '200':
           description: Service is healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  /api/auth/verify:
+    get:
+      tags: [auth]
+      summary: Проверить admin API key
+      description: Возвращает 200, если переданный `X-API-Key` валиден.
+      responses:
+        '200':
+          description: API key accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /metrics:
+    get:
+      security: []
+      tags: [metrics]
+      summary: Prometheus scrape endpoint
+      responses:
+        '200':
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema: { type: string }
+        '503':
+          description: Metrics registry unavailable
 
   /api/webhooks:
     get:
@@ -71,6 +110,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/webhooks/{id}:
     get:
@@ -109,6 +149,20 @@ paths:
         '204': { description: Webhook deleted }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /api/webhooks/slug/{slug}:
+    get:
+      tags: [webhooks]
+      summary: Получить вебхук по slug
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      responses:
+        '200':
+          description: Webhook found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /api/webhooks/{id}/toggle:
     patch:
       tags: [webhooks]
@@ -134,12 +188,15 @@ paths:
         - name: size
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - { $ref: '#/components/parameters/RequestMethodFilter' }
+        - { $ref: '#/components/parameters/RequestStatusFilter' }
       responses:
         '200':
           description: Paginated request logs
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PageRequestLogResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [requests]
@@ -233,6 +290,7 @@ paths:
         '202': { description: Request accepted without proxy response }
         '404': { $ref: '#/components/responses/NotFound' }
         '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
     post:
       security: []
       tags: [receiver]
@@ -245,6 +303,56 @@ paths:
             schema: { type: object, additionalProperties: true }
           text/plain:
             schema: { type: string }
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
+    put:
+      security: []
+      tags: [receiver]
+      summary: Отправить PUT-запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+          text/plain:
+            schema: { type: string }
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
+    patch:
+      security: []
+      tags: [receiver]
+      summary: Отправить PATCH-запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+          text/plain:
+            schema: { type: string }
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
+    delete:
+      security: []
+      tags: [receiver]
+      summary: Отправить DELETE-запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
       responses:
         '200': { description: Proxy or templated response returned }
         '202': { description: Request accepted without proxy response }
@@ -275,6 +383,22 @@ components:
       in: path
       required: true
       schema: { type: string, example: github-push-events }
+    RequestMethodFilter:
+      name: method
+      in: query
+      required: false
+      description: Фильтр истории по HTTP-методу.
+      schema:
+        type: string
+        enum: [GET, POST, PUT, PATCH, DELETE]
+    RequestStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: Фильтр истории по proxy status. Поддерживает классы `2xx`..`5xx`, точный код `200`..`599`, либо `none` для запросов без proxy ответа.
+      schema:
+        type: string
+        example: 2xx
   responses:
     BadRequest:
       description: Ошибка валидации
@@ -286,16 +410,28 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Неверный или отсутствующий admin API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
   schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, example: UP }
     CreateWebhookRequest:
       type: object
       required: [name]
       properties:
         name: { type: string, example: GitHub Push Events }
         description: { type: string, nullable: true }
-        methods: { type: string, example: POST }
+        methods:
+          type: string
+          description: Comma-separated список разрешённых HTTP-методов.
+          example: POST,GET
         debugMode: { type: boolean, default: true }
-        proxyUrl: { type: string, nullable: true, example: https://httpbin.org/post }
+        proxyUrl: { type: string, nullable: true, example: "https://httpbin.org/post" }
         proxyHeaders:
           type: object
           additionalProperties: { type: string }
@@ -310,8 +446,23 @@ components:
           example: '{"ok":true,"status":"{{proxy.status}}"}'
         maxLogCount: { type: integer, default: 100, minimum: 1, maximum: 10000 }
     UpdateWebhookRequest:
-      allOf:
-        - { $ref: '#/components/schemas/CreateWebhookRequest' }
+      type: object
+      description: Partial update. Переданные поля заменяют текущие значения.
+      properties:
+        name: { type: string, example: GitHub Push Events }
+        description: { type: string, nullable: true }
+        methods:
+          type: string
+          description: Comma-separated список разрешённых HTTP-методов.
+          example: POST,GET
+        debugMode: { type: boolean }
+        proxyUrl: { type: string, nullable: true, example: "https://httpbin.org/post" }
+        proxyHeaders:
+          type: object
+          additionalProperties: { type: string }
+        requestTemplate: { type: string, nullable: true }
+        responseTemplate: { type: string, nullable: true }
+        maxLogCount: { type: integer, minimum: 1, maximum: 10000 }
     WebhookResponse:
       type: object
       properties:

@@ -1,122 +1,601 @@
 openapi: 3.0.3
 info:
   title: Dynamic Webhook Service API
-  description: REST API для управления динамическими вебхуками
-  version: 1.0.0
-  contact:
-    name: Team
-    email: support@webhookservice.com
+  version: 1.0.2-demo6
+  description: |
+    API для управления динамическими вебхуками, логами запросов, шаблонами и кэшами.
 
+    Шаблонизатор поддерживает:
+    - подстановку переменных: `{{body.field}}`, `${body.field}`;
+    - условия: `{{#if body.urgent}}...{{/if}}`;
+    - циклы: `{{#each body.items}}...{{/each}}`;
+    - fallback/default values: `{{body.user.name | "Anonymous"}}`;
+    - альтернативный fallback-оператор: `{{body.user.name ?? "Anonymous"}}`;
+    - metadata внутри циклов: `{{@index}}`, `{{@first}}`, `{{@last}}`, `{{@key}}`;
+    - диагностику preview-ошибок со строкой, колонкой и snippet.
 servers:
   - url: http://localhost:8080
     description: Local development server
-
+security:
+  - ApiKeyAuth: []
 tags:
+  - name: health
+    description: Service health checks
+  - name: auth
+    description: Проверка admin API key
   - name: webhooks
-    description: Управление вебхуками
+    description: CRUD для вебхуков
   - name: requests
-    description: История принятых запросов
+    description: История входящих запросов и статистика
   - name: templates
-    description: Шаблонизатор
-
+    description: Preview шаблонов
+  - name: cache
+    description: Метрики и ручной сброс кэшей
+  - name: receiver
+    description: Динамические endpoint'ы вебхуков
+  - name: metrics
+    description: Prometheus metrics endpoint
 paths:
   /api/health:
     get:
+      security: []
+      tags: [health]
       summary: Health check
       responses:
         '200':
           description: Service is healthy
           content:
             application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  /api/auth/verify:
+    get:
+      tags: [auth]
+      summary: Проверить admin API key
+      description: Возвращает 200, если переданный `X-API-Key` валиден.
+      responses:
+        '200':
+          description: API key accepted
+          content:
+            application/json:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    example: ok
+                  ok: { type: boolean, example: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /metrics:
+    get:
+      security: []
+      tags: [metrics]
+      summary: Prometheus scrape endpoint
+      responses:
+        '200':
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema: { type: string }
+        '503':
+          description: Metrics registry unavailable
 
   /api/webhooks:
+    get:
+      tags: [webhooks]
+      summary: Получить список вебхуков
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Paginated webhooks
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PageWebhookResponse' }
     post:
-      tags:
-        - webhooks
+      tags: [webhooks]
       summary: Создать новый вебхук
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required:
-                - name
-              properties:
-                name:
-                  type: string
-                  example: GitHub Push Events
-                description:
-                  type: string
-                  example: Webhook for GitHub push events
-                methods:
-                  type: array
-                  items:
-                    type: string
-                    enum: [GET, POST]
-                  example: [POST]
+            schema: { $ref: '#/components/schemas/CreateWebhookRequest' }
       responses:
         '201':
           description: Вебхук создан
-        '400':
-          description: Ошибка валидации
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/webhooks/{id}:
     get:
-      tags:
-        - webhooks
-      summary: Получить список вебхуков
-      parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 0
-        - name: size
-          in: query
-          schema:
-            type: integer
-            default: 20
+      tags: [webhooks]
+      summary: Получить вебхук по ID
+      parameters: [{ $ref: '#/components/parameters/WebhookId' }]
       responses:
         '200':
-          description: Список вебхуков
+          description: Webhook found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [webhooks]
+      summary: Обновить вебхук
+      parameters: [{ $ref: '#/components/parameters/WebhookId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateWebhookRequest' }
+      responses:
+        '200':
+          description: Webhook updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [webhooks]
+      summary: Удалить вебхук
+      parameters: [{ $ref: '#/components/parameters/WebhookId' }]
+      responses:
+        '204': { description: Webhook deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/webhooks/slug/{slug}:
+    get:
+      tags: [webhooks]
+      summary: Получить вебхук по slug
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      responses:
+        '200':
+          description: Webhook found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/webhooks/{id}/toggle:
+    patch:
+      tags: [webhooks]
+      summary: Переключить активность вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookId' }]
+      responses:
+        '200':
+          description: Webhook toggled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/webhooks/{id}/requests:
+    get:
+      tags: [requests]
+      summary: Получить историю запросов вебхука
+      parameters:
+        - { $ref: '#/components/parameters/WebhookId' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - { $ref: '#/components/parameters/RequestMethodFilter' }
+        - { $ref: '#/components/parameters/RequestStatusFilter' }
+      responses:
+        '200':
+          description: Paginated request logs
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PageRequestLogResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [requests]
+      summary: Очистить историю запросов вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookId' }]
+      responses:
+        '204': { description: Logs removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/webhooks/{id}/requests/{requestId}:
+    get:
+      tags: [requests]
+      summary: Получить конкретный лог запроса
+      parameters:
+        - { $ref: '#/components/parameters/WebhookId' }
+        - { $ref: '#/components/parameters/RequestId' }
+      responses:
+        '200':
+          description: Request log found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RequestLogResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/webhooks/{id}/stats:
+    get:
+      tags: [requests]
+      summary: Получить статистику вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookId' }]
+      responses:
+        '200':
+          description: Stats response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatsResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/templates/preview:
+    post:
+      tags: [templates]
+      summary: Сформировать preview шаблона
+      description: Возвращает успешный preview или диагностическую ошибку шаблонизатора.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplatePreviewRequest' }
+            examples:
+              fallback:
+                value:
+                  template: 'Hello, {{body.user.name | "Anonymous"}}'
+                  data: { body: { user: {} } }
+              error:
+                value:
+                  template: '{{#if body.urgent}}URGENT'
+                  data: { body: { urgent: true } }
+      responses:
+        '200':
+          description: Preview generated or preview syntax error returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplatePreviewResponse' }
+
+  /api/cache/stats:
+    get:
+      tags: [cache]
+      summary: Метрики кэшей
+      responses:
+        '200':
+          description: Cache metrics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CacheStatsResponse' }
+
+  /api/cache/flush:
+    post:
+      tags: [cache]
+      summary: Сброс всех кэшей
+      responses:
+        '204':
+          description: Кэши сброшены
+
+  /webhook/{slug}:
+    get:
+      security: []
+      tags: [receiver]
+      summary: Динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+    post:
+      security: []
+      tags: [receiver]
+      summary: Отправить запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+          text/plain:
+            schema: { type: string }
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
+    put:
+      security: []
+      tags: [receiver]
+      summary: Отправить PUT-запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+          text/plain:
+            schema: { type: string }
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
+    patch:
+      security: []
+      tags: [receiver]
+      summary: Отправить PATCH-запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+          text/plain:
+            schema: { type: string }
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
+    delete:
+      security: []
+      tags: [receiver]
+      summary: Отправить DELETE-запрос на динамический endpoint вебхука
+      parameters: [{ $ref: '#/components/parameters/WebhookSlug' }]
+      responses:
+        '200': { description: Proxy or templated response returned }
+        '202': { description: Request accepted without proxy response }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { description: Method not allowed }
+        '409': { description: Webhook inactive }
+        '502': { description: Proxy error }
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  parameters:
+    WebhookId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    WebhookSlug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string, example: github-push-events }
+    RequestMethodFilter:
+      name: method
+      in: query
+      required: false
+      description: Фильтр истории по HTTP-методу.
+      schema:
+        type: string
+        enum: [GET, POST, PUT, PATCH, DELETE]
+    RequestStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: Фильтр истории по proxy status. Поддерживает классы `2xx`..`5xx`, точный код `200`..`599`, либо `none` для запросов без proxy ответа.
+      schema:
+        type: string
+        example: 2xx
+  responses:
+    BadRequest:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Неверный или отсутствующий admin API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
   schemas:
-    Webhook:
+    HealthResponse:
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        slug:
-          type: string
-        description:
-          type: string
+        status: { type: string, example: UP }
+    CreateWebhookRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: GitHub Push Events }
+        description: { type: string, nullable: true }
         methods:
-          type: array
-          items:
-            type: string
-        isActive:
-          type: boolean
-        createdAt:
           type: string
-          format: date-time
-
-    Error:
+          description: Comma-separated список разрешённых HTTP-методов.
+          example: POST,GET
+        debugMode: { type: boolean, default: true }
+        proxyUrl: { type: string, nullable: true, example: "https://httpbin.org/post" }
+        proxyHeaders:
+          type: object
+          additionalProperties: { type: string }
+        requestTemplate:
+          type: string
+          nullable: true
+          example: |
+            {"event":"{{body.event | "unknown"}}","repo":"{{body.repository.name}}"}
+        responseTemplate:
+          type: string
+          nullable: true
+          example: '{"ok":true,"status":"{{proxy.status}}"}'
+        maxLogCount: { type: integer, default: 100, minimum: 1, maximum: 10000 }
+    UpdateWebhookRequest:
+      type: object
+      description: Partial update. Переданные поля заменяют текущие значения.
+      properties:
+        name: { type: string, example: GitHub Push Events }
+        description: { type: string, nullable: true }
+        methods:
+          type: string
+          description: Comma-separated список разрешённых HTTP-методов.
+          example: POST,GET
+        debugMode: { type: boolean }
+        proxyUrl: { type: string, nullable: true, example: "https://httpbin.org/post" }
+        proxyHeaders:
+          type: object
+          additionalProperties: { type: string }
+        requestTemplate: { type: string, nullable: true }
+        responseTemplate: { type: string, nullable: true }
+        maxLogCount: { type: integer, minimum: 1, maximum: 10000 }
+    WebhookResponse:
       type: object
       properties:
-        status:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        endpointUrl: { type: string }
+        methods: { type: string }
+        isActive: { type: boolean }
+        debugMode: { type: boolean }
+        proxyUrl: { type: string, nullable: true }
+        proxyHeaders:
+          type: object
+          additionalProperties: { type: string }
+        requestTemplate: { type: string, nullable: true }
+        responseTemplate: { type: string, nullable: true }
+        maxLogCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PageWebhookResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookResponse' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer, format: int64 }
+    RequestLogResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        webhookId: { type: string, format: uuid }
+        receivedAt: { type: string, format: date-time }
+        method: { type: string }
+        url: { type: string }
+        queryParams:
+          type: object
+          additionalProperties: { type: string }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+        body: { type: string, nullable: true }
+        contentType: { type: string, nullable: true }
+        sourceIp: { type: string, nullable: true }
+        responseStatus: { type: integer, nullable: true }
+        proxyResponse: { type: string, nullable: true }
+        proxyDurationMs: { type: integer, format: int64, nullable: true }
+    PageRequestLogResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RequestLogResponse' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer, format: int64 }
+    StatsResponse:
+      type: object
+      properties:
+        totalRequests: { type: integer, format: int64 }
+        todayRequests: { type: integer, format: int64 }
+        methodCounts:
+          type: object
+          additionalProperties: { type: integer, format: int64 }
+        lastRequestAt: { type: string, format: date-time, nullable: true }
+    TemplatePreviewRequest:
+      type: object
+      required: [template]
+      properties:
+        template: { type: string, example: '{{#each body.items}}{{name}};{{/each}}' }
+        data:
+          type: object
+          additionalProperties: true
+    TemplatePreviewResponse:
+      oneOf:
+        - { $ref: '#/components/schemas/PreviewSuccess' }
+        - { $ref: '#/components/schemas/PreviewError' }
+    PreviewSuccess:
+      type: object
+      required:
+        - ok
+        - result
+      properties:
+        ok:
+          type: boolean
+          example: true
+        result:
+          type: string
+          example: "build;test;"
+    PreviewError:
+      type: object
+      required:
+        - ok
+        - error
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Unclosed template block '{{#if}}'"
+        line:
           type: integer
-        message:
+          nullable: true
+          example: 3
+        column:
+          type: integer
+          nullable: true
+          example: 12
+        snippet:
           type: string
-        timestamp:
-          type: string
-          format: date-time
+          nullable: true
+          example: "  {{#if user.premium"
+    CacheStatsResponse:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        caches:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/CacheMetrics' }
+    CacheMetrics:
+      type: object
+      properties:
+        size: { type: integer, format: int64 }
+        hitCount: { type: integer, format: int64 }
+        missCount: { type: integer, format: int64 }
+        hitRatio: { type: number, format: double }
+        evictionCount: { type: integer, format: int64 }
+    ErrorResponse:
+      type: object
+      properties:
+        status: { type: integer }
+        message: { type: string }
+        timestamp: { type: string, format: date-time }

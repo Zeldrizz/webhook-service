@@ -32,6 +32,8 @@ docker-compose up --build -d
 - Swagger UI: `http://localhost:8080/swagger/`
 - API Health: `http://localhost:8080/api/health`
 
+Для демо-окружения admin API key по умолчанию — `password` (переопределяется через `ADMIN_API_KEY`).
+
 ### Остановка
 
 ```bash
@@ -66,7 +68,7 @@ server:
 database:
   url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/webhooks}
   user: ${DATABASE_USER:webhook_user}
-  password: ${DATABASE_PASSWORD:webhook_pass}
+  password: ${DATABASE_PASSWORD:webhook_password}
   pool-size: 32
   pipelining-limit: 256
   connection-timeout: 30000
@@ -113,6 +115,17 @@ webhook:
   max-log-count-default: 100
   cleanup-interval-hours: 24
 ```
+
+## Что умеет продукт
+
+Webhook Service превращает входящие HTTP-события в управляемые endpoint'ы:
+
+- **Dashboard вебхуков:** быстрый поиск, статусы active/debug, копирование endpoint URL в один клик, включение/выключение и безопасное удаление.
+- **Создание и редактирование:** поля сгруппированы как `основное → проксирование → шаблоны`, есть inline-валидация, preview request/response шаблонов и подсказки по синтаксису.
+- **Инспекция запросов:** история с фильтрами по HTTP-методу и proxy status, пагинацией без перезагрузки, JSON-viewer для headers/query/body/proxy response.
+- **Проксирование:** optional `proxyUrl`, кастомные proxy headers, retry с exponential backoff и circuit breaker для защиты hot path.
+- **Шаблонизатор:** переменные `{{body.field}}` и `${body.field}`, условия `{{#if}}`, `{{else}}`, циклы `{{#each}}`, fallback `|`/`??`, metadata `{{@index}}`, `{{@first}}`, `{{@last}}`, `{{@key}}`.
+- **Cache/Auth UX:** cache hit-ratio badge с tooltip, подтверждаемый Flush, дружелюбный login overlay для `X-API-Key` и повторный запрос ключа при 401.
 
 ## Архитектура
 
@@ -254,33 +267,29 @@ curl -s -H "X-API-Key: password" http://localhost:8080/api/cache/stats | jq '.ca
 CACHE_ENABLED=false docker compose up -d --force-recreate app
 ```
 
-### Нагрузочное тестирование (k6) — полный цикл, Демо 6
+### Нагрузочное тестирование (k6) — Демо 6
 
-Полноценный load-test лежит в [`load-tests/`](load-tests/) и прогоняет три сценария **дважды** —
-с кэшем и без — на одном и том же образе, переключая `CACHE_ENABLED` без пересборки:
+Актуальный нагрузочный стенд лежит в [`load-tests/`](load-tests/) и отвечает на вопрос:
+какой RPS сервис держит устойчиво при заданных SLO.
 
-| Сценарий | Файл | Что нагружает |
-|----------|------|---------------|
-| CRUD | `crud.js` | `/api/webhooks` create→get→list→toggle→delete (+ инвалидация) |
-| Hot path (simple) | `receiver_simple.js` | `/webhook/:slug` без proxy/логирования — чистый эффект кэша lookup'а |
-| Hot path (proxy+template) | `receiver_proxy_template.js` | `/webhook/:slug` с трансформацией шаблона и проксированием на mock-target |
+| Файл | Назначение |
+|------|------------|
+| `run-capacity.sh` | Главный запуск: поднимает стек, прогоняет матрицу cache/verticles/workloads, сохраняет результаты. |
+| `capacity.js` | Staircase и soak-тест в open-model режиме (`constant-arrival-rate`). |
+| `spike.js` | Резкий всплеск нагрузки выше устойчивой точки. |
+| `ci-check.js` | Быстрый smoke для CI/локальной проверки. |
+| `mock-target.js` | Upstream-заглушка для proxy-сценариев. |
+| `gen-capacity-report.js` | Генерация итогового [`load-tests/CAPACITY.md`](load-tests/CAPACITY.md). |
 
 ```bash
 cd load-tests
-./run-all.sh                 # 30s/сценарий; VUS=80 DURATION=60s ./run-all.sh для нагрузки потяжелее
+QUICK=1 ./run-capacity.sh   # короткая проверка
+./run-capacity.sh           # полный прогон
 ```
 
-Скрипт поднимает стек, гоняет k6, снимает `/api/cache/stats` до/после и собирает таблицы
-RPS / p50 / p95 / p99 / error-rate в **[`load-tests/RESULTS.md`](load-tests/RESULTS.md)**
-(cache ON vs OFF + анализ узких мест и вторая волна оптимизаций). Подробности запуска —
-[`load-tests/README.md`](load-tests/README.md).
-
-**Характеризация ёмкости и SLI/SLO/SLA.** Для ответа «какой максимальный RPS система держит
-стабильно и при каких параметрах» есть отдельный open-model свип
-[`load-tests/run-capacity.sh`](load-tests/run-capacity.sh): staircase (`constant-arrival-rate`)
-+ soak + spike по матрице **cache {on,off} × verticles {1,2,4}**, с поиском точки насыщения и
-**max sustainable RPS @ SLO**. Результаты и рекомендованные SLI/SLO/SLA —
-**[`load-tests/CAPACITY.md`](load-tests/CAPACITY.md)**.
+Сценарии покрывают hot path `/webhook/:slug`, proxy/template path и CRUD `/api/webhooks`.
+Матрица сравнивает cache `on/off` и разное число Vert.x verticles. В отчёте фиксируются
+max sustainable RPS @ SLO, p50/p95/p99, error-rate, dropped iterations, soak и spike.
 
 ### Batch insert для логов
 
@@ -351,16 +360,22 @@ ADMIN_API_KEY=my-secret-key java -jar target/webhook-service.jar
 
 | Метод | Endpoint | Описание | Auth |
 |-------|----------|----------|------|
-| GET | `/api/webhooks/:id/requests` | История (пагинация) | ✅ |
+| GET | `/api/webhooks/:id/requests?page=0&size=20&method=POST&status=2xx` | История с фильтрами и пагинацией | ✅ |
 | GET | `/api/webhooks/:id/requests/:reqId` | Детали запроса | ✅ |
 | DELETE | `/api/webhooks/:id/requests` | Очистить историю | ✅ |
 | GET | `/api/webhooks/:id/stats` | Статистика | ✅ |
+
+Фильтр `status` принимает `2xx`, `3xx`, `4xx`, `5xx`, точный код `200`..`599` или `none`
+для запросов без proxy response.
 
 ### Templates
 
 | Метод | Endpoint | Описание | Auth |
 |-------|----------|----------|------|
 | POST | `/api/templates/preview` | Предпросмотр шаблона | ✅ |
+
+Preview возвращает `ok=true/result` либо `ok=false/error/line/column/snippet`, поэтому UI может
+показывать ошибку шаблона рядом с редактором без сохранения вебхука.
 
 ### Cache
 
@@ -375,12 +390,40 @@ ADMIN_API_KEY=my-secret-key java -jar target/webhook-service.jar
 |-------|----------|----------|------|
 | GET | `/api/auth/verify` | Проверка X-API-Key (200 OK = валиден) | ✅ |
 | GET | `/api/health` | Health check | — |
+| GET | `/metrics` | Prometheus scrape endpoint | — |
 
 ### Dynamic Endpoints
 
 | Метод | Endpoint | Описание | Auth |
 |-------|----------|----------|------|
 | ANY | `/webhook/:slug` | Приём запросов на вебхук | — |
+
+## Демо-сценарий
+
+1. Открыть `http://localhost:8080/`, ввести admin API key (`password` в demo-compose).
+2. На пустом dashboard нажать **Создать вебхук**.
+3. Заполнить название `Demo GitHub Events`, методы `POST,GET`, включить debug.
+4. В блоке шаблонов вставить request template и нажать **Preview**:
+
+```json
+{
+  "event": "{{body.event | \"unknown\"}}",
+  "repo": "{{body.repository.name | \"demo-repository\"}}",
+  "items": "{{#each body.items}}{{@index}}:{{name}};{{/each}}"
+}
+```
+
+5. Сохранить, скопировать endpoint URL кнопкой copy.
+6. Отправить тест из UI или curl:
+
+```bash
+curl -X POST http://localhost:8080/webhook/<slug> \
+  -H "Content-Type: application/json" \
+  -d '{"event":"push","repository":{"name":"demo"},"items":[{"name":"build"},{"name":"deploy"}]}'
+```
+
+7. В деталях вебхука показать статистику, фильтры истории по `POST`/`2xx`, JSON-viewer body/headers/proxy response.
+8. Нажать cache badge tooltip, затем **Flush** с подтверждением. Для Grafana/метрик запустить `bash demo/load.sh`.
 
 ## Docker
 
@@ -486,13 +529,14 @@ webhook-service/
 │   └── auth/                          # Тесты ApiKeyAuthHandler
 ├── load-tests/                       # k6 нагрузочные тесты (Демо 6)
 │   ├── lib/common.js                 # Общий конфиг + handleSummary
-│   ├── crud.js                       # Сценарий 1: CRUD
-│   ├── receiver_simple.js            # Сценарий 2: hot path без proxy
-│   ├── receiver_proxy_template.js    # Сценарий 3: hot path + template + proxy
+│   ├── capacity.js                   # Staircase/soak open-model сценарий
+│   ├── spike.js                      # Spike-тест
+│   ├── ci-check.js                   # Быстрый smoke для CI
 │   ├── mock-target.js                # Node upstream для proxy-сценария
-│   ├── run-all.sh                    # Прогон cache ON/OFF + сбор таблиц
-│   ├── gen-report.js                 # Агрегация results/*.json в markdown
-│   └── RESULTS.md                    # Результаты + анализ узких мест
+│   ├── run-capacity.sh               # Прогон матрицы cache/verticles/workloads
+│   ├── compute-sustainable.js        # Расчёт max sustainable RPS @ SLO
+│   ├── gen-capacity-report.js        # Агрегация results/*.json в markdown
+│   └── CAPACITY.md                   # Результаты + SLI/SLO/SLA
 ├── .github/workflows/ci.yml          # CI/CD pipeline
 ├── pom.xml
 ├── Dockerfile
