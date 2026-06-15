@@ -1,110 +1,140 @@
-/**
- * Request detail page.
- * Displays full details of a received request including proxy response.
- */
-
 import API from '../api.js';
 import { renderJsonViewer } from '../components/jsonViewer.js';
+import { showNotification } from '../components/notification.js';
+import {
+    actionLabel,
+    copyText,
+    escapeAttr,
+    escapeHtml,
+    formatDate,
+    icon,
+    renderEmptyState,
+    renderStatusCodeBadge,
+    renderSkeletonTable
+} from '../components/ui.js';
 
 export async function renderRequestDetail(container, webhookId, requestId) {
     container.innerHTML = `
-        <div class="text-center py-5"><div class="spinner-border"></div></div>
+        <section class="app-page-head">
+            <div>
+                <div class="app-page-kicker">Request trace</div>
+                <h1 class="app-page-title">Загружаю запрос</h1>
+                <p class="app-page-subtitle">Готовлю headers, query, body и proxy response.</p>
+            </div>
+        </section>
+        ${renderSkeletonTable(4, 4)}
     `;
 
     try {
         const requestLog = await API.getRequest(webhookId, requestId);
 
         container.innerHTML = `
-            <div class="app-page-head">
+            <section class="app-page-head">
                 <div>
-                    <div class="app-page-kicker">Request Trace</div>
-                    <h1 class="app-page-title">Request Detail</h1>
-                    <p class="app-page-subtitle">Request ID <code>${escapeHtml(requestLog.id)}</code></p>
+                    <div class="app-page-kicker">Request trace</div>
+                    <h1 class="app-page-title">${escapeHtml(requestLog.method)} request</h1>
+                    <p class="app-page-subtitle">
+                        <code>${escapeHtml(requestLog.id)}</code>
+                        <span class="app-inline-badges">${renderStatusCodeBadge(requestLog.responseStatus)}</span>
+                    </p>
                 </div>
                 <div class="app-actions">
-                    <a href="#webhook/${webhookId}" class="btn btn-outline-secondary">Back to Webhook</a>
+                    <button id="btn-copy-request-id" class="btn btn-app-ghost" type="button">${actionLabel('clipboard', 'ID')}</button>
+                    <a href="#webhook/${escapeAttr(webhookId)}" class="btn btn-app-ghost">${actionLabel('arrow-left', 'К вебхуку')}</a>
                 </div>
-            </div>
+            </section>
 
-            <div class="card mb-4">
-                <div class="card-header">Request info</div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4"><strong>Method</strong><div><span class="app-chip">${escapeHtml(requestLog.method)}</span></div></div>
-                        <div class="col-md-8"><strong>URL</strong><div><code class="app-code-inline">${escapeHtml(requestLog.url)}</code></div></div>
-                        <div class="col-md-4"><strong>Received at</strong><div>${formatDate(requestLog.receivedAt)}</div></div>
-                        <div class="col-md-4"><strong>Source IP</strong><div>${escapeHtml(requestLog.sourceIp || '-')}</div></div>
-                        <div class="col-md-4"><strong>Content-Type</strong><div>${escapeHtml(requestLog.contentType || '-')}</div></div>
-                    </div>
+            <section class="app-panel">
+                <div class="app-panel-head">
+                    <h2>Сводка</h2>
                 </div>
-            </div>
+                <div class="app-summary-grid">
+                    ${summaryItem('Метод', `<span class="app-badge is-method">${escapeHtml(requestLog.method)}</span>`)}
+                    ${summaryItem('URL', `<code class="app-code-inline">${escapeHtml(requestLog.url)}</code>`)}
+                    ${summaryItem('Получен', escapeHtml(formatDate(requestLog.receivedAt)))}
+                    ${summaryItem('Source IP', escapeHtml(requestLog.sourceIp || '-'))}
+                    ${summaryItem('Content-Type', escapeHtml(requestLog.contentType || '-'))}
+                    ${summaryItem('Proxy duration', requestLog.proxyDurationMs === null ? '-' : `${escapeHtml(requestLog.proxyDurationMs)} ms`)}
+                </div>
+            </section>
 
-            <div class="row g-4 mb-4">
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header">Headers</div>
-                        <div class="card-body"><div id="section-headers"></div></div>
-                    </div>
-                </div>
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header">Query parameters</div>
-                        <div class="card-body"><div id="section-query"></div></div>
-                    </div>
-                </div>
-            </div>
+            <section class="app-detail-grid">
+                ${sectionShell('Headers', 'section-headers', 'headers')}
+                ${sectionShell('Query parameters', 'section-query', 'query')}
+            </section>
 
-            <div class="card mb-4">
-                <div class="card-header">Request body</div>
-                <div class="card-body"><div id="section-body"></div></div>
-            </div>
+            <section class="app-panel">
+                ${sectionHead('Request body', 'body')}
+                <div id="section-body"></div>
+            </section>
 
-            ${requestLog.responseStatus !== null || requestLog.proxyResponse ? `
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <span>Proxy response</span>
-                        <span class="app-chip">${requestLog.responseStatus ?? '—'} ${requestLog.proxyDurationMs !== null ? `· ${requestLog.proxyDurationMs} ms` : ''}</span>
-                    </div>
-                    <div class="card-body"><div id="section-proxy"></div></div>
-                </div>
-            ` : ''}
+            <section class="app-panel">
+                ${sectionHead('Proxy response', 'proxy')}
+                <div id="section-proxy"></div>
+            </section>
         `;
 
-        renderMapSection('section-headers', requestLog.headers);
-        renderMapSection('section-query', requestLog.queryParams);
-        renderContent('section-body', requestLog.body);
+        renderContent('section-headers', requestLog.headers, 'headers');
+        renderContent('section-query', requestLog.queryParams, 'query');
+        renderContent('section-body', requestLog.body, 'body');
+        renderContent('section-proxy', requestLog.proxyResponse, 'proxy');
 
-        if (requestLog.responseStatus !== null || requestLog.proxyResponse) {
-            renderContent('section-proxy', requestLog.proxyResponse);
-        }
+        document.getElementById('btn-copy-request-id').addEventListener('click', async () => {
+            try {
+                await copyText(requestLog.id, 'Request ID скопирован', showNotification);
+            } catch {
+                showNotification('Не удалось скопировать ID', 'error');
+            }
+        });
+
+        document.querySelectorAll('[data-copy-section]').forEach(button => {
+            button.addEventListener('click', async () => {
+                const key = button.dataset.copySection;
+                try {
+                    await copyText(sectionRawValue(requestLog, key), 'Секция скопирована', showNotification);
+                } catch {
+                    showNotification('Не удалось скопировать секцию', 'error');
+                }
+            });
+        });
     } catch (error) {
         container.innerHTML = `
-            <div class="alert alert-danger">${escapeHtml(error.message)}</div>
+            <div class="alert alert-danger app-alert-row">
+                <div>
+                    <div class="fw-semibold">Не удалось загрузить запрос</div>
+                    <div>${escapeHtml(error.message)}</div>
+                </div>
+                <a href="#webhook/${escapeAttr(webhookId)}" class="btn btn-app-ghost">${actionLabel('arrow-left', 'К вебхуку')}</a>
+            </div>
         `;
     }
 }
 
-function renderMapSection(elementId, value) {
-    const el = document.getElementById(elementId);
-    const entries = Object.entries(value || {});
+function sectionShell(title, elementId, copyKey) {
+    return `
+        <div class="app-panel">
+            ${sectionHead(title, copyKey)}
+            <div id="${escapeAttr(elementId)}"></div>
+        </div>
+    `;
+}
 
-    if (!entries.length) {
-        el.innerHTML = '<div class="app-empty-state">Empty</div>';
-        return;
-    }
+function sectionHead(title, copyKey) {
+    return `
+        <div class="app-panel-head app-panel-head-with-actions">
+            <h2>${escapeHtml(title)}</h2>
+            <button class="btn btn-icon btn-app-ghost" type="button" title="Скопировать" data-copy-section="${escapeAttr(copyKey)}">
+                ${icon('clipboard')}
+            </button>
+        </div>
+    `;
+}
 
-    el.innerHTML = `
-        <div class="table-responsive">
-            <table class="table table-sm mb-0">
-                <tbody>
-                    ${entries.map(([key, val]) => `
-                        <tr>
-                            <th class="w-25">${escapeHtml(key)}</th>
-                            <td><code class="app-code-inline">${escapeHtml(String(val))}</code></td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+function summaryItem(label, valueHtml) {
+    return `
+        <div class="app-summary-item">
+            <div class="app-summary-label">${escapeHtml(label)}</div>
+            <div class="app-summary-value">${valueHtml}</div>
         </div>
     `;
 }
@@ -115,25 +145,37 @@ function renderContent(elementId, rawValue) {
         return;
     }
 
-    if (!rawValue) {
-        el.innerHTML = '<div class="app-empty-state">Empty</div>';
+    if (rawValue == null || rawValue === '') {
+        el.innerHTML = renderEmptyState({ title: 'Пусто', message: 'В этой секции нет данных.' });
+        return;
+    }
+
+    if (typeof rawValue === 'object') {
+        if (!Object.keys(rawValue).length) {
+            el.innerHTML = renderEmptyState({ title: 'Пусто', message: 'В этой секции нет данных.' });
+            return;
+        }
+        renderJsonViewer(el, rawValue);
         return;
     }
 
     try {
-        const parsed = JSON.parse(rawValue);
-        renderJsonViewer(el, parsed);
+        renderJsonViewer(el, JSON.parse(rawValue));
     } catch {
         el.innerHTML = `<pre class="app-preview-box mb-0">${escapeHtml(rawValue)}</pre>`;
     }
 }
 
-function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : '-';
-}
+function sectionRawValue(requestLog, key) {
+    const value = {
+        headers: requestLog.headers,
+        query: requestLog.queryParams,
+        body: requestLog.body,
+        proxy: requestLog.proxyResponse
+    }[key];
 
-function escapeHtml(value) {
-    const div = document.createElement('div');
-    div.textContent = value || '';
-    return div.innerHTML;
+    if (value == null) {
+        return '';
+    }
+    return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 }

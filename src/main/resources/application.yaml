@@ -4,7 +4,7 @@ server:
 database:
   url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/webhooks}
   user: ${DATABASE_USER:webhook_user}
-  password: ${DATABASE_PASSWORD:webhook_pass}
+  password: ${DATABASE_PASSWORD:webhook_password}
   pool-size: 64
   pipelining-limit: 256
   connection-timeout: 30000

@@ -30,7 +30,7 @@ const API = {
                     ? payload.message
                     : typeof payload === 'string' && payload.trim()
                             ? payload
-                            : `Request failed with status ${response.status}`;
+                            : friendlyStatusMessage(response.status);
             const error = new Error(message);
             error.status = response.status;
             error.payload = payload;
@@ -74,8 +74,18 @@ const API = {
         });
     },
 
-    fetchRequests(webhookId, page = 0, size = 20) {
-        return this.request(`/webhooks/${webhookId}/requests?page=${page}&size=${size}`);
+    fetchRequests(webhookId, page = 0, size = 20, filters = {}) {
+        const query = new URLSearchParams({
+            page: String(page),
+            size: String(size)
+        });
+        if (filters.method && filters.method !== 'all') {
+            query.set('method', filters.method);
+        }
+        if (filters.status && filters.status !== 'all') {
+            query.set('status', filters.status);
+        }
+        return this.request(`/webhooks/${webhookId}/requests?${query.toString()}`);
     },
 
     getRequest(webhookId, requestId) {
@@ -109,3 +119,13 @@ const API = {
 };
 
 export default API;
+
+function friendlyStatusMessage(status) {
+    if (status === 401) {
+        return 'Нужен корректный API-ключ.';
+    }
+    if (status >= 500) {
+        return `Сервер временно не справился с запросом (HTTP ${status}).`;
+    }
+    return `Request failed with status ${status}`;
+}

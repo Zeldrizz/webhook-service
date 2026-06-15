@@ -87,5 +87,3 @@ function escapeHtml(value) {
     div.textContent = value || '';
     return div.innerHTML;
 }
-
-console.log('Webhook Service App initialized');

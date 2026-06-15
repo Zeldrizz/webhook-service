@@ -162,8 +162,7 @@ public class MainVerticle extends AbstractVerticle {
                 .setCachingEnabled(false));
 
         router.route("/*").handler(StaticHandler.create("webroot")
-                .setCachingEnabled(true)
-                .setMaxAgeSeconds(3600));
+                .setCachingEnabled(false));
 
         HttpServerOptions serverOptions = new HttpServerOptions()
                 .setCompressionSupported(true)

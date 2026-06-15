@@ -9,6 +9,7 @@ import com.webhookservice.util.JsonUtil;
 import io.vertx.ext.web.RoutingContext;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 public class RequestLogHandler {
@@ -27,6 +28,16 @@ public class RequestLogHandler {
 
         int page = Math.max(0, intParam(ctx, "page", 0));
         int size = Math.min(Math.max(1, intParam(ctx, "size", 20)), 100);
+        String method = normalizeMethodParam(ctx.request().getParam("method"));
+        String statusFilter = normalizeStatusParam(ctx.request().getParam("status"));
+        if ("__invalid__".equals(method)) {
+            ErrorHandler.sendError(ctx, 400, "Invalid method filter");
+            return;
+        }
+        if ("__invalid__".equals(statusFilter)) {
+            ErrorHandler.sendError(ctx, 400, "Invalid status filter");
+            return;
+        }
 
         webhookService.getById(webhookId)
                 .onSuccess(webhook -> {
@@ -35,7 +46,7 @@ public class RequestLogHandler {
                         return;
                     }
 
-                    requestLogService.listByWebhookId(webhookId, page, size)
+                    requestLogService.listByWebhookId(webhookId, page, size, method, statusFilter)
                             .onSuccess(result -> {
                                 List<RequestLogResponse> items = result.items().stream()
                                         .map(RequestLogResponse::from)
@@ -139,6 +150,36 @@ public class RequestLogHandler {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
             return defaultValue;
+        }
+    }
+
+    private String normalizeMethodParam(String value) {
+        if (value == null || value.isBlank() || "all".equalsIgnoreCase(value)) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "GET", "POST", "PUT", "PATCH", "DELETE" -> normalized;
+            default -> "__invalid__";
+        };
+    }
+
+    private String normalizeStatusParam(String value) {
+        if (value == null || value.isBlank() || "all".equalsIgnoreCase(value)) {
+            return null;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if ("none".equals(normalized)) {
+            return normalized;
+        }
+        if (normalized.matches("[1-5]xx")) {
+            return normalized;
+        }
+        try {
+            int status = Integer.parseInt(normalized);
+            return status >= 100 && status <= 599 ? normalized : "__invalid__";
+        } catch (NumberFormatException e) {
+            return "__invalid__";
         }
     }
 }

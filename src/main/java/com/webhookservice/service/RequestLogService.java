@@ -114,7 +114,17 @@ public class RequestLogService {
     }
 
     public Future<Page<RequestLog>> listByWebhookId(UUID webhookId, int page, int size) {
-        return requestLogRepository.findByWebhookId(webhookId, page, size);
+        return listByWebhookId(webhookId, page, size, null, null);
+    }
+
+    public Future<Page<RequestLog>> listByWebhookId(
+            UUID webhookId,
+            int page,
+            int size,
+            String method,
+            String statusFilter
+    ) {
+        return requestLogRepository.findByWebhookId(webhookId, page, size, method, statusFilter);
     }
 
     public Future<RequestLog> getByWebhookIdAndId(UUID webhookId, UUID requestId) {
