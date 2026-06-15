@@ -1,247 +1,309 @@
-/**
- * Webhook detail page.
- * Displays configuration, stats, and request logs with pagination.
- */
-
 import API from '../api.js';
+import { flushCacheWithConfirmation } from '../components/cacheAdmin.js';
 import { showNotification } from '../components/notification.js';
+import {
+    actionLabel,
+    confirmAction,
+    copyText,
+    escapeAttr,
+    escapeHtml,
+    formatDate,
+    icon,
+    parseMethods,
+    renderDebugBadge,
+    renderEmptyState,
+    renderMethodBadges,
+    renderPageItem,
+    renderSkeletonTable,
+    renderStatusBadge,
+    renderStatusCodeBadge,
+    withButtonLoading
+} from '../components/ui.js';
+
+const PAGE_SIZE = 20;
 
 export async function renderWebhookDetail(container, webhookId) {
-    const pageSize = 20;
-    let webhook;
-    let stats;
-    let currentPage = 0;
+    const state = {
+        webhook: null,
+        stats: null,
+        currentPage: 0,
+        methodFilter: 'all',
+        statusFilter: 'all'
+    };
 
-    container.innerHTML = `
-        <div class="text-center py-5"><div class="spinner-border"></div></div>
-    `;
+    renderLoading(container);
 
     try {
-        [webhook, stats] = await Promise.all([
+        const [webhook, stats] = await Promise.all([
             API.getWebhook(webhookId),
             API.getStats(webhookId)
         ]);
+        state.webhook = webhook;
+        state.stats = stats;
     } catch (error) {
-        container.innerHTML = `
-            <div class="alert alert-danger">${escapeHtml(error.message)}</div>
-        `;
+        renderLoadError(container, error);
         return;
     }
 
-    container.innerHTML = `
-        <div class="app-page-head">
-            <div>
-                <div class="app-page-kicker">Webhook Profile</div>
-                <h1 class="app-page-title">${escapeHtml(webhook.name)}</h1>
-                <p class="app-page-subtitle">Delivery endpoint <code>${escapeHtml(webhook.slug)}</code></p>
-            </div>
-            <div class="app-actions">
-                <button id="btn-copy-url" class="btn btn-outline-secondary">Copy URL</button>
-                <button id="btn-test-request" class="btn btn-outline-secondary">Send Test Request</button>
-                <a href="#create?id=${webhook.id}" class="btn btn-outline-secondary">Edit</a>
-                <button id="btn-toggle" class="btn ${webhook.isActive ? 'btn-app-tonal' : 'btn-primary'}">${webhook.isActive ? 'Disable' : 'Enable'}</button>
-                <button id="btn-delete" class="btn btn-app-danger">Delete</button>
-                <a href="#dashboard" class="btn btn-outline-secondary">Back</a>
-            </div>
-        </div>
+    renderPage();
+    bindPageActions();
+    await loadLogs(0);
 
-        <div class="row g-3 mb-4">
-            <div class="col-sm-6 col-xl-3">
-                <div class="card app-stat-card h-100"><div class="card-body">
-                    <div>
-                        <div class="app-stat-label">Total requests</div>
-                        <div class="app-stat-value">${stats.totalRequests ?? 0}</div>
-                    </div>
-                    <div class="app-stat-meta">All captured deliveries for this webhook.</div>
-                </div></div>
-            </div>
-            <div class="col-sm-6 col-xl-3">
-                <div class="card app-stat-card h-100"><div class="card-body">
-                    <div>
-                        <div class="app-stat-label">Today</div>
-                        <div class="app-stat-value">${stats.todayRequests ?? 0}</div>
-                    </div>
-                    <div class="app-stat-meta">Requests received since local midnight.</div>
-                </div></div>
-            </div>
-            <div class="col-sm-6 col-xl-3">
-                <div class="card app-stat-card h-100"><div class="card-body">
-                    <div>
-                        <div class="app-stat-label">Last request</div>
-                        <div class="app-stat-meta fw-semibold">${stats.lastRequestAt ? formatDate(stats.lastRequestAt) : '-'}</div>
-                    </div>
-                    <div class="app-stat-meta">Latest delivery touching this endpoint.</div>
-                </div></div>
-            </div>
-            <div class="col-sm-6 col-xl-3">
-                <div class="card app-stat-card h-100"><div class="card-body">
-                    <div>
-                        <div class="app-stat-label">Methods breakdown</div>
-                        <div class="app-stat-meta fw-semibold">${renderMethodCounts(stats.methodCounts)}</div>
-                    </div>
-                    <div class="app-stat-meta">Traffic mix grouped by HTTP method.</div>
-                </div></div>
-            </div>
-        </div>
+    function renderPage() {
+        const webhook = state.webhook;
+        const stats = state.stats;
+        container.innerHTML = `
+            <section class="app-page-head">
+                <div>
+                    <div class="app-page-kicker">Webhook profile</div>
+                    <h1 class="app-page-title">${escapeHtml(webhook.name)}</h1>
+                    <p class="app-page-subtitle">
+                        <code>${escapeHtml(webhook.slug)}</code>
+                        <span class="app-inline-badges">${renderStatusBadge(webhook.isActive)} ${renderDebugBadge(webhook.debugMode)}</span>
+                    </p>
+                </div>
+                <div class="app-actions">
+                    <button id="btn-copy-url" class="btn btn-app-ghost" type="button">${actionLabel('clipboard', 'URL')}</button>
+                    <button id="btn-test-request" class="btn btn-app-ghost" type="button">${actionLabel('send', 'Тест')}</button>
+                    <a href="#edit/${escapeAttr(webhook.id)}" class="btn btn-app-ghost">${actionLabel('pencil', 'Изменить')}</a>
+                    <button id="btn-toggle" class="btn ${webhook.isActive ? 'btn-app-tonal' : 'btn-app-primary'}" type="button">
+                        ${actionLabel(webhook.isActive ? 'pause-fill' : 'play-fill', webhook.isActive ? 'Выключить' : 'Включить')}
+                    </button>
+                    <button id="btn-flush-cache" class="btn btn-app-ghost" type="button">${actionLabel('stars', 'Flush')}</button>
+                    <button id="btn-delete" class="btn btn-app-danger" type="button">${actionLabel('trash3', 'Удалить')}</button>
+                    <a href="#dashboard" class="btn btn-app-ghost">${actionLabel('arrow-left', 'Назад')}</a>
+                </div>
+            </section>
 
-        <div class="row g-4 mb-4">
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header">Configuration</div>
-                    <div class="card-body">
-                        <dl class="row mb-0">
-                            <dt class="col-sm-4">Endpoint</dt>
-                            <dd class="col-sm-8"><code class="app-code-inline">${escapeHtml(webhook.endpointUrl)}</code></dd>
-                            <dt class="col-sm-4">Methods</dt>
-                            <dd class="col-sm-8"><code>${escapeHtml(webhook.methods)}</code></dd>
-                            <dt class="col-sm-4">Status</dt>
-                            <dd class="col-sm-8">${renderStatusPill(webhook.isActive)}</dd>
-                            <dt class="col-sm-4">Debug</dt>
-                            <dd class="col-sm-8">${webhook.debugMode ? 'Enabled' : 'Disabled'}</dd>
-                            <dt class="col-sm-4">Max logs</dt>
-                            <dd class="col-sm-8">${webhook.maxLogCount}</dd>
-                            <dt class="col-sm-4">Created</dt>
-                            <dd class="col-sm-8">${formatDate(webhook.createdAt)}</dd>
-                            <dt class="col-sm-4">Updated</dt>
-                            <dd class="col-sm-8">${formatDate(webhook.updatedAt)}</dd>
-                            <dt class="col-sm-4">Description</dt>
-                            <dd class="col-sm-8">${escapeHtml(webhook.description || '-')}</dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header">Proxy</div>
-                    <div class="card-body">
-                        <p class="mb-2"><strong>URL:</strong> ${webhook.proxyUrl ? `<code class="app-code-inline">${escapeHtml(webhook.proxyUrl)}</code>` : '—'}</p>
-                        <p class="mb-2"><strong>Headers:</strong></p>
-                        <pre class="app-preview-box mb-0">${escapeHtml(JSON.stringify(webhook.proxyHeaders || {}, null, 2))}</pre>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <section class="app-stat-grid" aria-label="Статистика вебхука">
+                ${statCard('Всего запросов', stats.totalRequests ?? 0, 'Все сохранённые запросы')}
+                ${statCard('Сегодня', stats.todayRequests ?? 0, 'С момента локальной полуночи')}
+                ${statCard('Последний', stats.lastRequestAt ? formatDate(stats.lastRequestAt) : '-', 'Последняя активность endpoint')}
+                ${statCard('Методы', renderMethodCounts(stats.methodCounts), 'Распределение запросов')}
+            </section>
 
-        <div class="row g-4 mb-4">
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header">Request template</div>
-                    <div class="card-body">
-                        <pre class="app-preview-box mb-0">${escapeHtml(webhook.requestTemplate || '—')}</pre>
+            <section class="app-detail-grid">
+                <div class="app-panel">
+                    <div class="app-panel-head">
+                        <h2>Конфигурация</h2>
                     </div>
+                    <dl class="app-def-list">
+                        <dt>Endpoint</dt>
+                        <dd>
+                            <div class="app-endpoint-copy">
+                                <code class="app-code-inline">${escapeHtml(webhook.endpointUrl)}</code>
+                                <button class="btn btn-icon btn-app-ghost" id="btn-copy-url-inline" type="button" title="Скопировать endpoint">${icon('clipboard')}</button>
+                            </div>
+                        </dd>
+                        <dt>Методы</dt>
+                        <dd><div class="app-badge-stack">${renderMethodBadges(webhook.methods)}</div></dd>
+                        <dt>Max logs</dt>
+                        <dd>${escapeHtml(webhook.maxLogCount)}</dd>
+                        <dt>Создан</dt>
+                        <dd>${formatDate(webhook.createdAt)}</dd>
+                        <dt>Обновлён</dt>
+                        <dd>${formatDate(webhook.updatedAt)}</dd>
+                        <dt>Описание</dt>
+                        <dd>${escapeHtml(webhook.description || '-')}</dd>
+                    </dl>
                 </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header">Response template</div>
-                    <div class="card-body">
-                        <pre class="app-preview-box mb-0">${escapeHtml(webhook.responseTemplate || '—')}</pre>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                <span>Request logs</span>
-                <button id="btn-clear-logs" class="btn btn-app-danger btn-sm">Clear logs</button>
-            </div>
-            <div class="card-body">
+                <div class="app-panel">
+                    <div class="app-panel-head">
+                        <h2>Проксирование</h2>
+                    </div>
+                    <dl class="app-def-list">
+                        <dt>Proxy URL</dt>
+                        <dd>${webhook.proxyUrl ? `<code class="app-code-inline">${escapeHtml(webhook.proxyUrl)}</code>` : '-'}</dd>
+                        <dt>Headers</dt>
+                        <dd><pre class="app-preview-box compact mb-0">${escapeHtml(JSON.stringify(webhook.proxyHeaders || {}, null, 2))}</pre></dd>
+                    </dl>
+                </div>
+            </section>
+
+            <section class="app-detail-grid">
+                <div class="app-panel">
+                    <div class="app-panel-head"><h2>Request template</h2></div>
+                    <pre class="app-preview-box compact mb-0">${escapeHtml(webhook.requestTemplate || 'Не задан. В proxy уйдёт исходное тело запроса.')}</pre>
+                </div>
+                <div class="app-panel">
+                    <div class="app-panel-head"><h2>Response template</h2></div>
+                    <pre class="app-preview-box compact mb-0">${escapeHtml(webhook.responseTemplate || 'Не задан. Клиент получит proxy response или accepted response.')}</pre>
+                </div>
+            </section>
+
+            <section class="app-panel">
+                <div class="app-panel-head app-panel-head-with-actions">
+                    <div>
+                        <h2>История запросов</h2>
+                        <p>Фильтры применяются на API и сохраняют пагинацию без перезагрузки страницы.</p>
+                    </div>
+                    <button id="btn-clear-logs" class="btn btn-app-danger btn-sm" type="button">${actionLabel('eraser', 'Очистить')}</button>
+                </div>
+
+                <div class="app-toolbar compact" aria-label="Фильтры запросов">
+                    <div>
+                        <label class="form-label" for="logs-method-filter">Метод</label>
+                        <select id="logs-method-filter" class="form-select">
+                            <option value="all">Все</option>
+                            ${parseMethods(webhook.methods).map(method => `<option value="${escapeAttr(method)}">${escapeHtml(method)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="logs-status-filter">Статус</label>
+                        <select id="logs-status-filter" class="form-select">
+                            <option value="all">Все</option>
+                            <option value="2xx">2xx success</option>
+                            <option value="3xx">3xx redirect</option>
+                            <option value="4xx">4xx client</option>
+                            <option value="5xx">5xx server</option>
+                            <option value="none">Без proxy ответа</option>
+                        </select>
+                    </div>
+                    <div class="app-toolbar-spacer"></div>
+                    <button id="btn-refresh-logs" class="btn btn-app-ghost" type="button">${actionLabel('arrow-clockwise', 'Обновить')}</button>
+                </div>
+
+                <div id="logs-feedback" aria-live="polite"></div>
                 <div id="logs-container"></div>
-                <nav class="mt-3">
+                <nav class="mt-3" aria-label="Страницы запросов">
                     <ul id="logs-pagination" class="pagination pagination-sm mb-0"></ul>
                 </nav>
-            </div>
-        </div>
-    `;
+            </section>
+        `;
+    }
 
-    document.getElementById('btn-copy-url').addEventListener('click', async () => {
+    function bindPageActions() {
+        document.getElementById('logs-method-filter').value = state.methodFilter;
+        document.getElementById('logs-status-filter').value = state.statusFilter;
+        document.getElementById('btn-copy-url').addEventListener('click', copyEndpoint);
+        document.getElementById('btn-copy-url-inline').addEventListener('click', copyEndpoint);
+        document.getElementById('btn-test-request').addEventListener('click', sendTestRequest);
+        document.getElementById('btn-delete').addEventListener('click', deleteWebhook);
+        document.getElementById('btn-toggle').addEventListener('click', toggleWebhook);
+        document.getElementById('btn-clear-logs').addEventListener('click', clearLogs);
+        document.getElementById('btn-flush-cache').addEventListener('click', event => flushCacheWithConfirmation(event.currentTarget));
+        document.getElementById('btn-refresh-logs').addEventListener('click', () => loadLogs(state.currentPage));
+        document.getElementById('logs-method-filter').addEventListener('change', event => {
+            state.methodFilter = event.target.value;
+            loadLogs(0);
+        });
+        document.getElementById('logs-status-filter').addEventListener('change', event => {
+            state.statusFilter = event.target.value;
+            loadLogs(0);
+        });
+    }
+
+    async function copyEndpoint() {
         try {
-            await navigator.clipboard.writeText(webhook.endpointUrl);
-            showNotification('URL copied', 'success');
-        } catch (error) {
-            showNotification('Failed to copy URL', 'error');
+            await copyText(state.webhook.endpointUrl, 'Endpoint URL скопирован', showNotification);
+        } catch {
+            showNotification('Не удалось скопировать URL', 'error');
         }
-    });
+    }
 
-    document.getElementById('btn-test-request').addEventListener('click', async () => {
-        const btn = document.getElementById('btn-test-request');
-        const testMethod = pickTestMethod(webhook.methods);
-        const requestUrl = buildTestRequestUrl(webhook.endpointUrl, testMethod);
-        const requestOptions = buildTestRequestOptions(testMethod);
+    async function sendTestRequest(event) {
+        const btn = event.currentTarget;
+        await withButtonLoading(btn, 'Отправляю...', async () => {
+            const testMethod = pickTestMethod(state.webhook.methods);
+            const requestUrl = buildTestRequestUrl(state.webhook.endpointUrl, testMethod);
+            const requestOptions = buildTestRequestOptions(testMethod);
 
-        btn.disabled = true;
-        btn.textContent = 'Sending...';
-        try {
-            const response = await fetch(requestUrl, requestOptions);
-            const data = await parseResponsePayload(response);
-
-            if (!response.ok) {
-                const errorMessage = typeof data?.message === 'string'
-                    ? data.message
-                    : `HTTP ${response.status}`;
-                throw new Error(`${testMethod} failed: ${errorMessage}`);
-            }
-
-            const requestId = typeof data?.requestId === 'string' ? data.requestId : 'unknown';
-            showNotification(`Test ${testMethod} sent! Request ID: ${requestId}`, 'success');
-            await renderWebhookDetail(container, webhookId);
-        } catch (error) {
-            showNotification('Test request failed: ' + error.message, 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Send Test Request';
-        }
-    });
-
-    document.getElementById('btn-delete').addEventListener('click', async () => {
-        showDeleteConfirmation(webhook.id, webhook.name, async () => {
             try {
-                await API.deleteWebhook(webhook.id);
-                showNotification('Webhook deleted', 'success');
-                window.location.hash = '#dashboard';
+                const response = await fetch(requestUrl, requestOptions);
+                const data = await parseResponsePayload(response);
+
+                if (!response.ok) {
+                    const errorMessage = typeof data?.message === 'string'
+                        ? data.message
+                        : `HTTP ${response.status}`;
+                    throw new Error(`${testMethod} failed: ${errorMessage}`);
+                }
+
+                const requestId = typeof data?.requestId === 'string' ? data.requestId : 'unknown';
+                showNotification(`Тестовый ${testMethod} отправлен. Request ID: ${requestId}`, 'success');
+                state.stats = await API.getStats(webhookId);
+                renderPage();
+                bindPageActions();
+                await loadLogs(0);
             } catch (error) {
-                showNotification('Delete failed: ' + error.message, 'error');
+                showNotification('Тестовый запрос не прошёл: ' + error.message, 'error');
             }
         });
-    });
+    }
 
-    document.getElementById('btn-toggle').addEventListener('click', async () => {
-        try {
-            await API.toggleWebhook(webhookId);
-            showNotification('Status updated', 'success');
-            await renderWebhookDetail(container, webhookId);
-        } catch (error) {
-            showNotification(error.message, 'error');
+    async function deleteWebhook() {
+        const confirmed = await confirmAction({
+            title: 'Удалить вебхук',
+            message: `Удалить "${state.webhook.name}" и всю историю запросов?`,
+            confirmText: 'Удалить',
+            danger: true
+        });
+        if (!confirmed) {
+            return;
         }
-    });
+        try {
+            await API.deleteWebhook(state.webhook.id);
+            showNotification('Вебхук удалён', 'success');
+            window.location.hash = '#dashboard';
+        } catch (error) {
+            showNotification('Удаление не удалось: ' + error.message, 'error');
+        }
+    }
 
-    document.getElementById('btn-clear-logs').addEventListener('click', async () => {
-        if (!window.confirm('Очистить все логи этого вебхука?')) {
+    async function toggleWebhook(event) {
+        await withButtonLoading(event.currentTarget, 'Обновляю...', async () => {
+            try {
+                state.webhook = await API.toggleWebhook(webhookId);
+                showNotification('Статус обновлён', 'success');
+                renderPage();
+                bindPageActions();
+                await loadLogs(state.currentPage);
+            } catch (error) {
+                showNotification(error.message, 'error');
+            }
+        });
+    }
+
+    async function clearLogs() {
+        const confirmed = await confirmAction({
+            title: 'Очистить историю',
+            message: 'Удалить все сохранённые запросы этого вебхука? Конфигурация вебхука останется.',
+            confirmText: 'Очистить',
+            danger: true
+        });
+        if (!confirmed) {
             return;
         }
         try {
             await API.clearRequests(webhookId);
-            showNotification('Логи очищены', 'success');
-            await renderWebhookDetail(container, webhookId);
+            showNotification('История очищена', 'success');
+            state.stats = await API.getStats(webhookId);
+            renderPage();
+            bindPageActions();
+            await loadLogs(0);
         } catch (error) {
             showNotification(error.message, 'error');
         }
-    });
-
-    await loadLogs(0);
+    }
 
     async function loadLogs(page) {
-        currentPage = page;
+        state.currentPage = page;
         const logsContainer = document.getElementById('logs-container');
-        logsContainer.innerHTML = `<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>`;
+        const feedback = document.getElementById('logs-feedback');
+        logsContainer.innerHTML = renderSkeletonTable(6, 4);
+        feedback.innerHTML = '';
 
         try {
-            const data = await API.fetchRequests(webhookId, page, pageSize);
+            const data = await API.fetchRequests(webhookId, page, PAGE_SIZE, {
+                method: state.methodFilter,
+                status: state.statusFilter
+            });
             renderLogs(data);
             renderPagination(data);
         } catch (error) {
-            logsContainer.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(error.message)}</div>`;
+            logsContainer.innerHTML = '';
+            feedback.innerHTML = `<div class="alert alert-danger mb-3">${escapeHtml(error.message)}</div>`;
             document.getElementById('logs-pagination').innerHTML = '';
         }
     }
@@ -249,35 +311,41 @@ export async function renderWebhookDetail(container, webhookId) {
     function renderLogs(data) {
         const logsContainer = document.getElementById('logs-container');
         if (!data.items.length) {
-            logsContainer.innerHTML = `
-                <div class="app-empty-state">No requests yet. Send a test request to populate this feed.</div>
-            `;
+            logsContainer.innerHTML = renderEmptyState({
+                title: 'Запросов пока нет',
+                message: 'Отправьте тестовый запрос или дождитесь реального события.'
+            });
             return;
         }
 
         const rows = data.items.map(log => `
             <tr>
-                <td>${formatDate(log.receivedAt)}</td>
-                <td><span class="app-chip">${escapeHtml(log.method)}</span></td>
+                <td>
+                    <div class="app-row-title">${formatDate(log.receivedAt)}</div>
+                    <div class="app-row-subtitle">${escapeHtml(log.id)}</div>
+                </td>
+                <td><span class="app-badge is-method">${escapeHtml(log.method)}</span></td>
+                <td>${renderStatusCodeBadge(log.responseStatus)}</td>
+                <td>${log.proxyDurationMs === null ? '<span class="text-muted">-</span>' : `${escapeHtml(log.proxyDurationMs)} ms`}</td>
                 <td>${escapeHtml(log.sourceIp || '-')}</td>
-                <td>${log.responseStatus === null ? '<span class="text-muted">-</span>' : `<span class="app-chip">${log.responseStatus}</span>`}</td>
-                <td>${log.proxyDurationMs === null ? '<span class="text-muted">-</span>' : `${log.proxyDurationMs} ms`}</td>
-                <td class="text-end"><a href="#request/${webhookId}/${log.id}" class="btn btn-outline-secondary btn-sm">Details</a></td>
+                <td class="text-end">
+                    <a href="#request/${escapeAttr(webhookId)}/${escapeAttr(log.id)}" class="btn btn-sm btn-app-ghost">${actionLabel('braces', 'Детали')}</a>
+                </td>
             </tr>
         `).join('');
 
         logsContainer.innerHTML = `
             <div class="table-responsive">
-                <table class="table table-striped align-middle mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Method</th>
-                        <th>Source IP</th>
-                        <th>Proxy status</th>
-                        <th>Duration</th>
-                        <th></th>
-                    </tr>
+                        <tr>
+                            <th>Время</th>
+                            <th>Метод</th>
+                            <th>Proxy status</th>
+                            <th>Duration</th>
+                            <th>Source IP</th>
+                            <th class="text-end">Просмотр</th>
+                        </tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -295,32 +363,18 @@ export async function renderWebhookDetail(container, webhookId) {
         }
 
         let html = '';
-        html += `
-            <li class="page-item ${currentPage === 0 ? 'disabled' : ''}">
-                <a class="page-link" href="#" data-page="${Math.max(0, currentPage - 1)}">&laquo;</a>
-            </li>
-        `;
-
+        html += renderPageItem('Назад', Math.max(0, state.currentPage - 1), state.currentPage === 0);
         for (let page = 0; page < totalPages; page++) {
-            html += `
-                <li class="page-item ${page === currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" data-page="${page}">${page + 1}</a>
-                </li>
-            `;
+            html += renderPageItem(String(page + 1), page, false, page === state.currentPage);
         }
-
-        html += `
-            <li class="page-item ${currentPage >= totalPages - 1 ? 'disabled' : ''}">
-                <a class="page-link" href="#" data-page="${Math.min(totalPages - 1, currentPage + 1)}">&raquo;</a>
-            </li>
-        `;
+        html += renderPageItem('Вперёд', Math.min(totalPages - 1, state.currentPage + 1), state.currentPage >= totalPages - 1);
 
         nav.innerHTML = html;
         nav.querySelectorAll('[data-page]').forEach(link => {
             link.addEventListener('click', async event => {
                 event.preventDefault();
                 const page = Number(link.dataset.page);
-                if (Number.isFinite(page) && page !== currentPage) {
+                if (Number.isFinite(page) && page !== state.currentPage) {
                     await loadLogs(page);
                 }
             });
@@ -328,23 +382,51 @@ export async function renderWebhookDetail(container, webhookId) {
     }
 }
 
+function renderLoading(container) {
+    container.innerHTML = `
+        <section class="app-page-head">
+            <div>
+                <div class="app-page-kicker">Webhook profile</div>
+                <h1 class="app-page-title">Загружаю вебхук</h1>
+                <p class="app-page-subtitle">Подтягиваю конфигурацию, статистику и историю.</p>
+            </div>
+        </section>
+        ${renderSkeletonTable(5, 5)}
+    `;
+}
+
+function renderLoadError(container, error) {
+    container.innerHTML = `
+        <div class="alert alert-danger app-alert-row">
+            <div>
+                <div class="fw-semibold">Не удалось загрузить вебхук</div>
+                <div>${escapeHtml(error.message)}</div>
+            </div>
+            <a class="btn btn-app-ghost" href="#dashboard">${actionLabel('arrow-left', 'Назад')}</a>
+        </div>
+    `;
+}
+
+function statCard(label, value, meta) {
+    return `
+        <div class="app-stat-card">
+            <div class="app-stat-label">${escapeHtml(label)}</div>
+            <div class="app-stat-value">${typeof value === 'string' && value.includes('<') ? value : escapeHtml(value)}</div>
+            <div class="app-stat-meta">${escapeHtml(meta)}</div>
+        </div>
+    `;
+}
+
 function renderMethodCounts(methodCounts) {
     const entries = Object.entries(methodCounts || {});
     if (!entries.length) {
-        return '—';
+        return '-';
     }
-    return entries.map(([method, count]) => `<span class="app-chip">${escapeHtml(method)} · ${count}</span>`).join(' ');
-}
-
-function parseWebhookMethods(methods) {
-    return (methods || 'POST')
-        .split(',')
-        .map(method => method.trim().toUpperCase())
-        .filter(Boolean);
+    return entries.map(([method, count]) => `<span class="app-badge is-method">${escapeHtml(method)} ${escapeHtml(count)}</span>`).join(' ');
 }
 
 function pickTestMethod(methods) {
-    const allowedMethods = parseWebhookMethods(methods);
+    const allowedMethods = parseMethods(methods);
     if (allowedMethods.includes('POST')) {
         return 'POST';
     }
@@ -369,7 +451,11 @@ function buildTestRequestOptions(method) {
     }
 
     options.headers = { 'Content-Type': 'application/json' };
-    options.body = JSON.stringify({ test: true, timestamp: Date.now() });
+    options.body = JSON.stringify({
+        event: 'demo.test',
+        test: true,
+        timestamp: Date.now()
+    });
     return options;
 }
 
@@ -385,63 +471,4 @@ async function parseResponsePayload(response) {
     } catch {
         return { raw: text };
     }
-}
-
-function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : '-';
-}
-
-function escapeHtml(value) {
-    const div = document.createElement('div');
-    div.textContent = value || '';
-    return div.innerHTML;
-}
-
-function renderStatusPill(isActive) {
-    return `<span class="app-status-pill ${isActive ? 'is-active' : 'is-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`;
-}
-
-function showDeleteConfirmation(webhookId, webhookName, onConfirm) {
-    const modal = document.createElement('div');
-    modal.className = 'modal fade show d-block';
-    modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    modal.innerHTML = `
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Delete Webhook</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to delete webhook <strong>${escapeHtml(webhookName)}</strong>?</p>
-                    <p class="text-muted small mb-0">This action cannot be undone. All request logs will be permanently deleted.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="modal-confirm">Delete</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    modal.querySelector('#modal-cancel').addEventListener('click', () => {
-        modal.remove();
-    });
-
-    modal.querySelector('.btn-close').addEventListener('click', () => {
-        modal.remove();
-    });
-
-    modal.querySelector('#modal-confirm').addEventListener('click', () => {
-        modal.remove();
-        onConfirm();
-    });
-
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.remove();
-        }
-    });
 }

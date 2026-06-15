@@ -1,8 +1,3 @@
-/**
- * JSON viewer component.
- * Formats and displays JSON with lightweight syntax highlighting.
- */
-
 export function renderJsonViewer(container, data) {
     const pre = document.createElement('pre');
     pre.className = 'json-block mb-0';

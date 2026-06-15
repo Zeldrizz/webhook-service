@@ -1,23 +1,18 @@
 import API from '../api.js';
 import { showNotification } from './notification.js';
+import { confirmAction, withButtonLoading } from './ui.js';
 
 const BADGE_UPDATE_MS = 10_000;
 let badgeTimer = null;
-let observerStarted = false;
 
 function init() {
-    installCacheBadge();
-    installDetailFlushButtonObserver();
-}
-
-function installCacheBadge() {
     updateCacheBadge();
     if (!badgeTimer) {
         badgeTimer = window.setInterval(updateCacheBadge, BADGE_UPDATE_MS);
     }
 }
 
-async function updateCacheBadge() {
+export async function updateCacheBadge() {
     const badge = document.getElementById('cache-badge');
     if (!badge) {
         return;
@@ -27,84 +22,42 @@ async function updateCacheBadge() {
         const stats = await API.getCacheStats();
         const webhookRatio = stats?.caches?.webhookBySlug?.hitRatio ?? 0;
         const templateRatio = stats?.caches?.compiledTemplate?.hitRatio ?? 0;
-        badge.textContent = `Cache: ${(webhookRatio * 100).toFixed(1)}%`;
-        badge.title = `webhookBySlug hit ratio: ${(webhookRatio * 100).toFixed(1)}%; compiledTemplate hit ratio: ${(templateRatio * 100).toFixed(1)}%`;
-        badge.style.opacity = '1';
+        const size = stats?.caches?.webhookBySlug?.size ?? 0;
+        badge.textContent = `Cache hit ${(webhookRatio * 100).toFixed(1)}%`;
+        badge.title = `Hit ratio показывает долю запросов, обслуженных из кэша. webhookBySlug: ${(webhookRatio * 100).toFixed(1)}%, compiledTemplate: ${(templateRatio * 100).toFixed(1)}%, webhook cache size: ${size}.`;
+        badge.classList.remove('is-muted');
     } catch (error) {
-        badge.textContent = 'Cache: —';
+        badge.textContent = 'Cache —';
         badge.title = error?.message || String(error);
-        badge.style.opacity = '0.65';
+        badge.classList.add('is-muted');
     }
 }
 
-function installDetailFlushButtonObserver() {
-    if (observerStarted) {
-        return;
-    }
-    observerStarted = true;
-
-    const app = document.getElementById('app');
-    if (!app) {
-        return;
-    }
-
-    const observer = new MutationObserver(ensureFlushButton);
-    observer.observe(app, { childList: true, subtree: true });
-    window.addEventListener('hashchange', () => window.setTimeout(ensureFlushButton, 0));
-    ensureFlushButton();
-}
-
-function ensureFlushButton() {
-    if (!window.location.hash.startsWith('#webhook/')) {
-        return;
-    }
-    if (document.getElementById('btn-flush-cache')) {
+export async function flushCacheWithConfirmation(button = null) {
+    const confirmed = await confirmAction({
+        title: 'Сбросить кэш',
+        message: 'Все локальные кэши будут очищены на инстансах сервиса. Следующие запросы прогреют их заново.',
+        confirmText: 'Flush',
+        danger: true
+    });
+    if (!confirmed) {
         return;
     }
 
-    const actions = document.querySelector('.app-page-head .app-actions');
-    if (!actions) {
-        return;
-    }
-
-    const button = document.createElement('button');
-    button.id = 'btn-flush-cache';
-    button.className = 'btn btn-app-tonal';
-    button.type = 'button';
-    button.textContent = 'Flush cache';
-    button.addEventListener('click', flushCache);
-
-    const backLink = Array.from(actions.children).find(el => el.tagName === 'A' && el.getAttribute('href') === '#dashboard');
-    if (backLink) {
-        actions.insertBefore(button, backLink);
-    } else {
-        actions.appendChild(button);
-    }
-}
-
-async function flushCache() {
-    if (!window.confirm('Сбросить все кэши?')) {
-        return;
-    }
-
-    const button = document.getElementById('btn-flush-cache');
-    const originalText = button?.textContent;
-    if (button) {
-        button.disabled = true;
-        button.textContent = 'Flushing...';
-    }
-
-    try {
+    const run = async () => {
         await API.flushCache();
         showNotification('Кэш сброшен', 'success');
         await updateCacheBadge();
+    };
+
+    try {
+        if (button) {
+            await withButtonLoading(button, 'Сбрасываю...', run);
+        } else {
+            await run();
+        }
     } catch (error) {
         showNotification(error?.message || String(error), 'error');
-    } finally {
-        if (button) {
-            button.disabled = false;
-            button.textContent = originalText || 'Flush cache';
-        }
     }
 }
 

@@ -1,5 +1,15 @@
 import API from '../api.js';
 import { showNotification } from '../components/notification.js';
+import {
+    actionLabel,
+    clearFieldErrors,
+    debounce,
+    escapeAttr,
+    escapeHtml,
+    icon,
+    setFieldError,
+    withButtonLoading
+} from '../components/ui.js';
 
 const SUPPORTED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -23,99 +33,144 @@ export async function renderWebhookCreate(container, webhookId = null) {
     container.innerHTML = `
         <section class="app-page-head">
             <div>
-                <div class="app-page-kicker">Builder</div>
-                <h1 class="app-page-title">${isEdit ? 'Edit Webhook' : 'Create Webhook'}</h1>
-                <p class="app-page-subtitle">Configure the endpoint, proxy behavior and template output in one place.</p>
+                <div class="app-page-kicker">${isEdit ? 'Редактирование' : 'Новый endpoint'}</div>
+                <h1 class="app-page-title">${isEdit ? escapeHtml(existing.name) : 'Создать вебхук'}</h1>
+                <p class="app-page-subtitle">Настройте приём, проксирование и шаблоны ответа без длинной простыни полей.</p>
             </div>
-            <div class="app-actions"><a class="btn btn-app-ghost" href="#dashboard">Back</a></div>
+            <div class="app-actions">
+                ${existing?.endpointUrl ? `<a class="btn btn-app-ghost" href="#webhook/${escapeAttr(existing.id)}">${actionLabel('box-arrow-up-right', 'К деталям')}</a>` : ''}
+                <a class="btn btn-app-ghost" href="#dashboard">${actionLabel('arrow-left', 'Назад')}</a>
+            </div>
         </section>
 
         <div id="form-error" aria-live="polite"></div>
 
-        <form id="webhook-form" class="row g-4" novalidate>
-            <div class="col-lg-7">
-                <div class="card mb-4"><div class="card-header">General</div><div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label" for="field-name">Name *</label>
-                        <input class="form-control" id="field-name" type="text" maxlength="255" required value="${escapeAttr(existing?.name || '')}">
+        <form id="webhook-form" class="app-form" novalidate>
+            <section class="app-form-section">
+                <div class="app-section-head">
+                    <div>
+                        <h2>Основное</h2>
+                        <p>Название, публичный slug, методы и режим логирования.</p>
                     </div>
-                    <div class="mb-3">
+                    <div class="app-section-counter">1</div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-lg-6">
+                        <label class="form-label" for="field-name">Название *</label>
+                        <input class="form-control" id="field-name" type="text" maxlength="255" required placeholder="GitHub Push Events" value="${escapeAttr(existing?.name || '')}">
+                        <div class="invalid-feedback" data-error-for="field-name"></div>
+                    </div>
+                    <div class="col-lg-6">
                         <label class="form-label" for="field-slug-preview">Slug preview</label>
-                        <input class="form-control" id="field-slug-preview" type="text" readonly>
+                        <div class="app-input-icon">
+                            ${icon('link-45deg')}
+                            <input class="form-control" id="field-slug-preview" type="text" readonly>
+                        </div>
+                        <div class="form-text">Slug генерируется из названия и используется в <code>/webhook/:slug</code>.</div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="field-description">Description</label>
-                        <textarea class="form-control" id="field-description" rows="3">${escapeHtml(existing?.description || '')}</textarea>
+                    <div class="col-12">
+                        <label class="form-label" for="field-description">Описание</label>
+                        <textarea class="form-control" id="field-description" rows="3" placeholder="Куда приходит событие и кто им пользуется">${escapeHtml(existing?.description || '')}</textarea>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label d-block">HTTP Methods</label>
-                        <div class="d-flex flex-wrap gap-3">
+                    <div class="col-lg-7">
+                        <label class="form-label d-block">HTTP методы *</label>
+                        <div class="app-segmented" role="group" aria-label="HTTP методы">
                             ${SUPPORTED_METHODS.map(method => `
-                                <div class="form-check">
-                                    <input class="form-check-input method-checkbox" type="checkbox" id="method-${method}" value="${method}" ${methods.has(method) ? 'checked' : ''}>
-                                    <label class="form-check-label" for="method-${method}">${method}</label>
-                                </div>
+                                <input class="btn-check method-checkbox" type="checkbox" id="method-${method}" value="${method}" ${methods.has(method) ? 'checked' : ''}>
+                                <label class="btn" for="method-${method}">${escapeHtml(method)}</label>
                             `).join('')}
                         </div>
+                        <div class="invalid-feedback d-block" id="method-error"></div>
                     </div>
-                    <div class="row g-3 align-items-center">
-                        <div class="col-md-6">
-                            <label class="form-label" for="field-max-log-count">Max log count</label>
-                            <input class="form-control" id="field-max-log-count" type="number" min="1" max="10000" value="${escapeAttr(existing?.maxLogCount || 100)}">
-                        </div>
-                        <div class="col-md-6"><div class="form-check mt-4">
+                    <div class="col-sm-6 col-lg-2">
+                        <label class="form-label" for="field-max-log-count">Лимит логов</label>
+                        <input class="form-control" id="field-max-log-count" type="number" min="1" max="10000" value="${escapeAttr(existing?.maxLogCount || 100)}">
+                        <div class="invalid-feedback" data-error-for="field-max-log-count"></div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label d-block">Debug</label>
+                        <div class="app-toggle-line">
                             <input class="form-check-input" id="field-debug-mode" type="checkbox" ${existing?.debugMode === false ? '' : 'checked'}>
-                            <label class="form-check-label" for="field-debug-mode">Debug mode</label>
-                        </div></div>
+                            <label class="form-check-label" for="field-debug-mode">Сохранять историю запросов</label>
+                        </div>
                     </div>
-                    ${existing?.endpointUrl ? `<div class="mt-3"><a class="btn btn-sm btn-app-ghost" href="#webhook/${escapeAttr(existing.id)}">View Details</a></div>` : ''}
-                </div></div>
+                </div>
+            </section>
 
-                <div class="card mb-4"><div class="card-header">Proxy Configuration</div><div class="card-body">
-                    <div class="mb-3">
+            <section class="app-form-section">
+                <div class="app-section-head">
+                    <div>
+                        <h2>Проксирование</h2>
+                        <p>Опциональный upstream и заголовки, которые сервис добавит при forward.</p>
+                    </div>
+                    <div class="app-section-counter">2</div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-lg-6">
                         <label class="form-label" for="field-proxy-url">Proxy URL</label>
                         <input class="form-control" id="field-proxy-url" type="url" placeholder="https://example.com/events" value="${escapeAttr(existing?.proxyUrl || '')}">
+                        <div class="invalid-feedback" data-error-for="field-proxy-url"></div>
+                        <div class="form-text">Если оставить пустым, запрос будет принят без внешнего forward.</div>
+                    </div>
+                    <div class="col-lg-6">
+                        <label class="form-label" for="field-proxy-headers">Proxy headers</label>
+                        <textarea class="form-control app-code-input" id="field-proxy-headers" rows="5" spellcheck="false" placeholder='{"X-Service": "webhook-demo"}'>${escapeHtml(existing?.proxyHeaders ? JSON.stringify(existing.proxyHeaders, null, 2) : '')}</textarea>
+                        <div class="invalid-feedback" data-error-for="field-proxy-headers"></div>
+                        <div class="form-text">JSON object; значения будут отправлены как строки.</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="app-form-section">
+                <div class="app-section-head">
+                    <div>
+                        <h2>Шаблоны</h2>
+                        <p>Preview использует демо-данные и показывает ошибку синтаксиса рядом с редактором.</p>
+                    </div>
+                    <div class="app-section-counter">3</div>
+                </div>
+
+                <div class="app-template-help">
+                    <span><code>{{body.field}}</code> или <code>\${body.field}</code></span>
+                    <span><code>{{#if body.urgent}}...{{else}}...{{/if}}</code></span>
+                    <span><code>{{#each body.items}}{{name}}{{/each}}</code></span>
+                    <span><code>{{body.user.name | "Anonymous"}}</code></span>
+                </div>
+
+                <div class="app-template-grid">
+                    <div>
+                        <div class="app-field-head">
+                            <label class="form-label" for="field-request-template">Request template</label>
+                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-request-template">${actionLabel('play-circle', 'Preview')}</button>
+                        </div>
+                        <textarea class="form-control app-code-input" id="field-request-template" rows="12" spellcheck="false" placeholder='{"event":"{{body.event | \"unknown\"}}"}'>${escapeHtml(existing?.requestTemplate || '')}</textarea>
+                        <div class="form-text">Рендерится перед proxy-вызовом. Доступны <code>request</code>, <code>body</code>, <code>headers</code>, <code>queryParams</code>, <code>webhook</code>.</div>
                     </div>
                     <div>
-                        <label class="form-label" for="field-proxy-headers">Proxy Headers (JSON object)</label>
-                        <textarea class="form-control app-code-input" id="field-proxy-headers" rows="5" spellcheck="false">${escapeHtml(existing?.proxyHeaders ? JSON.stringify(existing.proxyHeaders, null, 2) : '')}</textarea>
+                        <label class="form-label" for="request-template-preview">Request preview</label>
+                        <pre id="request-template-preview" class="app-preview-box" tabindex="0">Нажмите Preview или начните вводить шаблон.</pre>
                     </div>
-                </div></div>
-            </div>
-
-            <div class="col-lg-5">
-                <div class="card mb-4"><div class="card-header">Templates</div><div class="card-body">
-                    <div class="alert alert-light mb-3">
-                        <div class="fw-semibold mb-1">Template syntax</div>
-                        <div class="small">
-                            Variables: <code>{{body.field}}</code>, <code>\${body.field}</code><br>
-                            Conditions: <code>{{#if body.urgent}}...{{/if}}</code><br>
-                            Loops: <code>{{#each body.items}}Name: {{name}}{{/each}}</code><br>
-                            Fallback: <code>{{body.user.name | "Anonymous"}}</code>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="field-request-template">Request Template</label>
-                        <textarea class="form-control app-code-input" id="field-request-template" rows="9" spellcheck="false">${escapeHtml(existing?.requestTemplate || '')}</textarea>
-                        <div class="form-text">Rendered before proxy call. Available namespaces: <code>request</code>, <code>body</code>, <code>headers</code>, <code>queryParams</code>, <code>webhook</code>.</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="field-response-template">Response Template</label>
-                        <textarea class="form-control app-code-input" id="field-response-template" rows="7" spellcheck="false">${escapeHtml(existing?.responseTemplate || '')}</textarea>
-                        <div class="form-text">Rendered after proxy call. Available: <code>{{proxy.status}}</code>, <code>{{proxy.response}}</code>, <code>{{proxy.durationMs}}</code>.</div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                        <button class="btn btn-sm btn-app-tonal" type="button" id="preview-request-template">Preview Request Template</button>
-                        <button class="btn btn-sm btn-app-tonal" type="button" id="preview-response-template">Preview Response Template</button>
-                    </div>
-                    <label class="form-label" for="template-preview-result">Template Preview</label>
-                    <pre id="template-preview-result" class="app-preview-box mb-0" tabindex="0">Click Preview to see the template result.</pre>
-                </div></div>
-
-                <div class="d-flex justify-content-end gap-2">
-                    <button class="btn btn-app-primary" type="submit" id="submit-webhook">${isEdit ? 'Save' : 'Create'}</button>
-                    <a class="btn btn-app-ghost" href="#dashboard">Cancel</a>
                 </div>
+
+                <div class="app-template-grid">
+                    <div>
+                        <div class="app-field-head">
+                            <label class="form-label" for="field-response-template">Response template</label>
+                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-response-template">${actionLabel('play-circle', 'Preview')}</button>
+                        </div>
+                        <textarea class="form-control app-code-input" id="field-response-template" rows="10" spellcheck="false" placeholder='{"ok":true,"status":"{{proxy.status}}"}'>${escapeHtml(existing?.responseTemplate || '')}</textarea>
+                        <div class="form-text">Рендерится после proxy-вызова. Доступны <code>proxy.status</code>, <code>proxy.response</code>, <code>proxy.durationMs</code>.</div>
+                    </div>
+                    <div>
+                        <label class="form-label" for="response-template-preview">Response preview</label>
+                        <pre id="response-template-preview" class="app-preview-box" tabindex="0">Нажмите Preview или начните вводить шаблон.</pre>
+                    </div>
+                </div>
+            </section>
+
+            <div class="app-form-footer">
+                <a class="btn btn-app-ghost" href="#dashboard">${actionLabel('x-lg', 'Отмена')}</a>
+                <button class="btn btn-app-primary" type="submit" id="submit-webhook">${actionLabel(isEdit ? 'check2-circle' : 'plus-circle', isEdit ? 'Сохранить' : 'Создать')}</button>
             </div>
         </form>
     `;
@@ -123,33 +178,53 @@ export async function renderWebhookCreate(container, webhookId = null) {
     const form = document.getElementById('webhook-form');
     const nameInput = document.getElementById('field-name');
     const slugPreview = document.getElementById('field-slug-preview');
-    const previewBox = document.getElementById('template-preview-result');
+    const requestTemplate = document.getElementById('field-request-template');
+    const responseTemplate = document.getElementById('field-response-template');
 
     updateSlugPreview();
     nameInput.addEventListener('input', updateSlugPreview);
 
-    document.getElementById('preview-request-template').addEventListener('click', async event => previewTemplate('request', event.currentTarget));
-    document.getElementById('preview-response-template').addEventListener('click', async event => previewTemplate('response', event.currentTarget));
+    document.getElementById('field-proxy-headers').addEventListener('blur', () => {
+        clearFieldErrors(form);
+        try {
+            collectPayload({ validate: false, parseHeaders: true });
+        } catch (error) {
+            showFieldValidationError(error);
+        }
+    });
+
+    document.getElementById('preview-request-template').addEventListener('click', event => previewTemplate('request', event.currentTarget, false));
+    document.getElementById('preview-response-template').addEventListener('click', event => previewTemplate('response', event.currentTarget, false));
+
+    const requestPreviewDebounced = debounce(() => {
+        if (requestTemplate.value.trim()) previewTemplate('request', null, true);
+    }, 700);
+    const responsePreviewDebounced = debounce(() => {
+        if (responseTemplate.value.trim()) previewTemplate('response', null, true);
+    }, 700);
+    requestTemplate.addEventListener('input', requestPreviewDebounced);
+    responseTemplate.addEventListener('input', responsePreviewDebounced);
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
+        clearFieldErrors(form);
         clearInlineError();
 
         let payload;
         try {
-            payload = collectPayload();
+            payload = collectPayload({ validate: true, parseHeaders: true });
         } catch (error) {
-            showInlineError(error);
+            showFieldValidationError(error);
             showNotification(error, 'error');
             return;
         }
 
         const submitButton = document.getElementById('submit-webhook');
-        await withButtonLoading(submitButton, isEdit ? 'Saving...' : 'Creating...', async () => {
+        await withButtonLoading(submitButton, isEdit ? 'Сохраняю...' : 'Создаю...', async () => {
             setFormReadonly(form, true);
             try {
                 const webhook = isEdit ? await API.updateWebhook(webhookId, payload) : await API.createWebhook(payload);
-                showNotification(isEdit ? 'Webhook updated' : 'Webhook created', 'success');
+                showNotification(isEdit ? 'Вебхук обновлён' : 'Вебхук создан', 'success');
                 window.location.hash = `#webhook/${webhook.id}`;
             } catch (error) {
                 showInlineError(error);
@@ -160,56 +235,82 @@ export async function renderWebhookCreate(container, webhookId = null) {
         });
     });
 
-    async function previewTemplate(kind, button) {
+    async function previewTemplate(kind, button, silent) {
+        const previewBox = document.getElementById(`${kind}-template-preview`);
         clearInlineError();
-        await withButtonLoading(button, 'Rendering...', async () => {
+        previewBox.classList.remove('is-error');
+
+        const run = async () => {
             try {
-                const payload = collectPayload();
-                const sampleData = buildSampleData(payload, existing);
+                const payload = collectPayload({ validate: false, parseHeaders: true });
                 const template = kind === 'request'
                     ? payload.requestTemplate || defaultRequestTemplate()
                     : payload.responseTemplate || defaultResponseTemplate();
-                const result = await API.previewTemplate(template, sampleData);
+                if (!template.trim()) {
+                    previewBox.textContent = 'Шаблон пустой. Будет использовано исходное тело/ответ.';
+                    return;
+                }
+                const result = await API.previewTemplate(template, buildSampleData(payload, existing));
                 if (result?.ok === false) {
                     renderPreviewError(previewBox, result);
-                    showInlineTemplateError(result);
+                    if (!silent) showInlineTemplateError(result);
                     return;
                 }
                 renderPreviewSuccess(previewBox, formatPreviewResult(result));
             } catch (error) {
                 renderPreviewError(previewBox, { error: error?.message || String(error) });
-                showInlineError(error);
-                showNotification(error, 'error');
+                if (!silent) {
+                    showFieldValidationError(error);
+                    showNotification(error, 'error');
+                }
             }
-        });
+        };
+
+        if (button) {
+            await withButtonLoading(button, 'Рендерю...', run);
+        } else {
+            await run();
+        }
     }
 
-    function collectPayload() {
+    function collectPayload({ validate, parseHeaders }) {
         const name = document.getElementById('field-name').value.trim();
         const description = document.getElementById('field-description').value.trim();
         const proxyUrl = document.getElementById('field-proxy-url').value.trim();
-        const requestTemplate = document.getElementById('field-request-template').value;
-        const responseTemplate = document.getElementById('field-response-template').value;
-        const maxLogCount = Number(document.getElementById('field-max-log-count').value || 100);
+        const requestTemplateValue = requestTemplate.value;
+        const responseTemplateValue = responseTemplate.value;
+        const maxLogCountRaw = document.getElementById('field-max-log-count').value || '100';
+        const maxLogCount = Number(maxLogCountRaw);
         const debugMode = document.getElementById('field-debug-mode').checked;
-        const methods = Array.from(document.querySelectorAll('.method-checkbox:checked')).map(input => input.value);
+        const selectedMethods = Array.from(document.querySelectorAll('.method-checkbox:checked')).map(input => input.value);
         const proxyHeadersRaw = document.getElementById('field-proxy-headers').value.trim();
 
-        if (!name) throw new Error('Webhook name is required');
-        if (!methods.length) throw new Error('At least one HTTP method is required');
+        if (validate && !name) {
+            throw validationError('field-name', 'Введите понятное название вебхука.');
+        }
+        if (validate && !selectedMethods.length) {
+            throw validationError('methods', 'Выберите хотя бы один HTTP метод.');
+        }
         if (!Number.isInteger(maxLogCount) || maxLogCount < 1 || maxLogCount > 10000) {
-            throw new Error('maxLogCount must be an integer from 1 to 10000');
+            throw validationError('field-max-log-count', 'Лимит должен быть целым числом от 1 до 10000.');
+        }
+        if (proxyUrl) {
+            try {
+                new URL(proxyUrl);
+            } catch {
+                throw validationError('field-proxy-url', 'Введите полный URL, например https://example.com/events.');
+            }
         }
 
         return {
-            name,
+            name: name || 'Webhook preview',
             description: description || null,
-            methods: methods.join(','),
+            methods: selectedMethods.join(','),
             debugMode,
             proxyUrl: proxyUrl || '',
-            proxyHeaders: parseProxyHeaders(proxyHeadersRaw),
-            requestTemplate,
-            responseTemplate,
+            proxyHeaders: parseHeaders ? parseProxyHeaders(proxyHeadersRaw) : {},
+            requestTemplate: requestTemplateValue,
+            responseTemplate: responseTemplateValue,
             maxLogCount
         };
     }
@@ -221,22 +322,38 @@ export async function renderWebhookCreate(container, webhookId = null) {
 
 function renderInitialLoading(container, isEdit) {
     container.innerHTML = `
-        <section class="app-page-head"><div><div class="app-page-kicker">Builder</div><h1 class="app-page-title">${isEdit ? 'Edit Webhook' : 'Create Webhook'}</h1><p class="app-page-subtitle">${isEdit ? 'Loading webhook configuration...' : 'Preparing form...'}</p></div></section>
-        <div class="card"><div class="card-body d-flex align-items-center gap-3" role="status" aria-live="polite"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>${isEdit ? 'Loading webhook...' : 'Loading form...'}</span></div></div>
+        <section class="app-page-head">
+            <div>
+                <div class="app-page-kicker">Форма</div>
+                <h1 class="app-page-title">${isEdit ? 'Редактирование вебхука' : 'Создание вебхука'}</h1>
+                <p class="app-page-subtitle">${isEdit ? 'Загружаю настройки...' : 'Готовлю форму...'}</p>
+            </div>
+        </section>
+        <div class="app-panel app-loading-line" role="status" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span>${isEdit ? 'Загружаю вебхук...' : 'Загружаю форму...'}</span>
+        </div>
     `;
 }
 
 function renderLoadError(container, error) {
     container.innerHTML = `
-        <section class="app-page-head"><div><div class="app-page-kicker">Builder</div><h1 class="app-page-title">Webhook form</h1><p class="app-page-subtitle">The form could not be loaded.</p></div><div class="app-actions"><a class="btn btn-app-ghost" href="#dashboard">Back</a></div></section>
-        <div class="alert alert-danger"><div class="fw-semibold">Failed to load webhook</div><div>${escapeHtml(error?.message || String(error))}</div></div>
+        <section class="app-page-head">
+            <div>
+                <div class="app-page-kicker">Форма</div>
+                <h1 class="app-page-title">Вебхук</h1>
+                <p class="app-page-subtitle">Не удалось загрузить настройки.</p>
+            </div>
+            <div class="app-actions"><a class="btn btn-app-ghost" href="#dashboard">${actionLabel('arrow-left', 'Назад')}</a></div>
+        </section>
+        <div class="alert alert-danger"><div class="fw-semibold">Ошибка загрузки</div><div>${escapeHtml(error?.message || String(error))}</div></div>
     `;
 }
 
 function showInlineError(error) {
     const target = document.getElementById('form-error');
     if (!target) return;
-    target.innerHTML = `<div class="alert alert-danger" role="alert"><div class="fw-semibold">Action failed</div><div>${escapeHtml(error?.message || String(error))}</div></div>`;
+    target.innerHTML = `<div class="alert alert-danger" role="alert"><div class="fw-semibold">Действие не выполнено</div><div>${escapeHtml(error?.message || String(error))}</div></div>`;
 }
 
 function clearInlineError() {
@@ -246,19 +363,25 @@ function clearInlineError() {
 
 function showInlineTemplateError(result) {
     const location = result.line ? `, строка ${result.line}, колонка ${result.column}` : '';
-    showInlineError({ message: `Template error: ${result.error || 'syntax error'}${location}` });
+    showInlineError({ message: `Ошибка шаблона: ${result.error || 'syntax error'}${location}` });
 }
 
-async function withButtonLoading(button, label, task) {
-    const originalHtml = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${escapeHtml(label)}`;
-    try {
-        await task();
-    } finally {
-        button.disabled = false;
-        button.innerHTML = originalHtml;
+function showFieldValidationError(error) {
+    if (error?.fieldId === 'methods') {
+        document.getElementById('method-error').textContent = error.message;
+        return;
     }
+    if (error?.fieldId) {
+        setFieldError(document.getElementById(error.fieldId), error.message);
+    } else {
+        showInlineError(error);
+    }
+}
+
+function validationError(fieldId, message) {
+    const error = new Error(message);
+    error.fieldId = fieldId;
+    return error;
 }
 
 function setFormReadonly(form, readonly) {
@@ -273,15 +396,15 @@ function formatPreviewResult(result) {
 }
 
 function renderPreviewSuccess(previewBox, value) {
-    previewBox.classList.remove('border', 'border-danger');
+    previewBox.classList.remove('is-error');
     previewBox.textContent = value;
 }
 
 function renderPreviewError(previewBox, result) {
-    previewBox.classList.add('border', 'border-danger');
-    const location = result.line ? `<br><span>строка ${escapeHtml(result.line)}, колонка ${escapeHtml(result.column)}</span>` : '';
-    const snippet = result.snippet ? `<br><code>${escapeHtml(result.snippet)}</code>` : '';
-    previewBox.innerHTML = `<strong>${escapeHtml(result.error || 'Template syntax error')}</strong>${location}${snippet}`;
+    previewBox.classList.add('is-error');
+    const location = result.line ? `\nстрока ${result.line}, колонка ${result.column}` : '';
+    const snippet = result.snippet ? `\n${result.snippet}` : '';
+    previewBox.textContent = `${result.error || 'Template syntax error'}${location}${snippet}`;
 }
 
 function parseProxyHeaders(raw) {
@@ -289,11 +412,11 @@ function parseProxyHeaders(raw) {
     let parsed;
     try {
         parsed = JSON.parse(raw);
-    } catch (error) {
-        throw new Error('Proxy headers must be a valid JSON object');
+    } catch {
+        throw validationError('field-proxy-headers', 'Headers должны быть валидным JSON object.');
     }
     if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('Proxy headers must be a JSON object');
+        throw validationError('field-proxy-headers', 'Headers должны быть JSON object, не массивом.');
     }
     return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)]));
 }
@@ -302,14 +425,14 @@ function defaultRequestTemplate() {
     return `{
   "event": "{{body.event | \"unknown\"}}",
   "repository": "{{body.repository.name | \"demo-repository\"}}",
-  "urgentMessage": "{{#if body.urgent}}URGENT: {{body.message}}{{/if}}",
-  "items": "{{#each body.items}}{{name}}={{quantity}};{{/each}}"
+  "urgentMessage": "{{#if body.urgent}}URGENT: {{body.message}}{{else}}normal{{/if}}",
+  "items": "{{#each body.items}}{{@index}}:{{name}}={{quantity}};{{/each}}"
 }`;
 }
 
 function defaultResponseTemplate() {
     return `{
-  "ok": "{{#if proxy.status}}true{{/if}}",
+  "ok": "{{#if proxy.status}}true{{else}}false{{/if}}",
   "status": "{{proxy.status}}",
   "traceId": "{{proxy.response.traceId | \"no-trace\"}}"
 }`;
@@ -376,14 +499,4 @@ function slugify(value) {
         .replace(/[^a-z0-9-]/g, '')
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '') || 'webhook';
-}
-
-function escapeHtml(value) {
-    const div = document.createElement('div');
-    div.textContent = value == null ? '' : String(value);
-    return div.innerHTML;
-}
-
-function escapeAttr(value) {
-    return escapeHtml(value).replace(/"/g, '&quot;');
 }

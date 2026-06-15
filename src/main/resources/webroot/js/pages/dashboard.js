@@ -1,126 +1,168 @@
-/**
- * Dashboard page - all webhooks list.
- *
- * Keeps list rendering client-side while adding explicit loading states,
- * recoverable error UI and a custom delete confirmation dialog.
- */
 import API from '../api.js';
 import { showNotification } from '../components/notification.js';
+import {
+    actionLabel,
+    confirmAction,
+    copyText,
+    escapeAttr,
+    escapeHtml,
+    formatDate,
+    icon,
+    renderDebugBadge,
+    renderEmptyState,
+    renderMethodBadges,
+    renderPageItem,
+    renderSkeletonTable,
+    renderStatusBadge,
+    withButtonLoading
+} from '../components/ui.js';
 
 const PAGE_SIZE = 20;
 
 export async function renderDashboard(container) {
-    let currentPage = 0;
-    let lastResponse = null;
-    let searchTerm = '';
-    let statusFilter = 'all';
+    const state = {
+        currentPage: 0,
+        lastResponse: null,
+        searchTerm: '',
+        statusFilter: 'all',
+        debugFilter: 'all'
+    };
 
     container.innerHTML = `
         <section class="app-page-head">
             <div>
-                <div class="app-page-kicker">Operations</div>
-                <h1 class="app-page-title">Webhook Dashboard</h1>
-                <p class="app-page-subtitle">
-                    Manage endpoints, keep delivery flows readable, and review activity without visual noise.
-                </p>
+                <div class="app-page-kicker">Панель управления</div>
+                <h1 class="app-page-title">Вебхуки</h1>
             </div>
             <div class="app-actions">
-                <a class="btn btn-app-primary" href="#create">New Webhook</a>
-                <a class="btn btn-app-ghost" href="/swagger/" target="_blank" rel="noreferrer">API Docs</a>
+                <a class="btn btn-app-primary" href="#create">${actionLabel('plus-lg', 'Создать')}</a>
+                <a class="btn btn-app-ghost" href="/swagger/" target="_blank" rel="noreferrer">${actionLabel('file-earmark-code', 'OpenAPI')}</a>
             </div>
         </section>
 
-        <section class="card mb-4">
-            <div class="card-body">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-8">
-                        <label class="form-label" for="dashboard-search">Search</label>
-                        <input id="dashboard-search" class="form-control" type="search" placeholder="Name, slug, description or endpoint URL">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" for="dashboard-status">Status</label>
-                        <select id="dashboard-status" class="form-select">
-                            <option value="all">All</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
-                    </div>
+        <section class="app-toolbar" aria-label="Фильтры вебхуков">
+            <div class="app-toolbar-search">
+                <label class="form-label" for="dashboard-search">Поиск</label>
+                <div class="app-input-icon">
+                    ${icon('search')}
+                    <input id="dashboard-search" class="form-control" type="search" placeholder="Название, slug, описание или endpoint">
                 </div>
+            </div>
+            <div>
+                <label class="form-label" for="dashboard-status">Статус</label>
+                <select id="dashboard-status" class="form-select">
+                    <option value="all">Все</option>
+                    <option value="active">Активные</option>
+                    <option value="inactive">Выключенные</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="dashboard-debug">Debug</label>
+                <select id="dashboard-debug" class="form-select">
+                    <option value="all">Любой</option>
+                    <option value="on">Debug on</option>
+                    <option value="off">Debug off</option>
+                </select>
             </div>
         </section>
 
         <div id="dashboard-feedback" aria-live="polite"></div>
+        <div id="dashboard-summary" class="app-list-summary"></div>
         <div id="dashboard-table"></div>
-        <nav id="dashboard-pagination" class="mt-3" aria-label="Webhook pages"></nav>
+        <nav id="dashboard-pagination" class="mt-3" aria-label="Страницы вебхуков"></nav>
     `;
 
-    const searchInput = document.getElementById('dashboard-search');
-    const statusSelect = document.getElementById('dashboard-status');
-
-    searchInput.addEventListener('input', () => {
-        searchTerm = searchInput.value.trim().toLowerCase();
+    document.getElementById('dashboard-search').addEventListener('input', event => {
+        state.searchTerm = event.target.value.trim().toLowerCase();
         renderTable();
     });
-
-    statusSelect.addEventListener('change', () => {
-        statusFilter = statusSelect.value;
+    document.getElementById('dashboard-status').addEventListener('change', event => {
+        state.statusFilter = event.target.value;
+        renderTable();
+    });
+    document.getElementById('dashboard-debug').addEventListener('change', event => {
+        state.debugFilter = event.target.value;
         renderTable();
     });
 
     await loadPage(0);
 
     async function loadPage(page) {
-        currentPage = page;
-        renderLoadingState('Loading webhooks...');
+        state.currentPage = page;
+        renderLoadingState();
         clearFeedback();
 
         try {
-            lastResponse = await API.fetchWebhooks(page, PAGE_SIZE);
+            state.lastResponse = await API.fetchWebhooks(page, PAGE_SIZE);
             renderTable();
             renderPagination();
         } catch (error) {
-            lastResponse = null;
-            renderErrorState(error, () => loadPage(currentPage));
+            state.lastResponse = null;
+            renderErrorState(error, () => loadPage(state.currentPage));
+            document.getElementById('dashboard-summary').innerHTML = '';
             document.getElementById('dashboard-pagination').innerHTML = '';
         }
     }
 
     function renderTable() {
         const tableContainer = document.getElementById('dashboard-table');
-        if (!lastResponse) {
+        const summary = document.getElementById('dashboard-summary');
+        if (!state.lastResponse) {
             tableContainer.innerHTML = '';
+            summary.innerHTML = '';
             return;
         }
 
-        const items = filterItems(lastResponse.items);
+        const originalItems = state.lastResponse.items || [];
+        const items = filterItems(originalItems);
+        const hasFilters = Boolean(state.searchTerm) || state.statusFilter !== 'all' || state.debugFilter !== 'all';
+        summary.innerHTML = renderSummary(items.length, state.lastResponse.total || 0, hasFilters);
+
         if (!items.length) {
-            tableContainer.innerHTML = `
-                <div class="app-empty-state">
-                    No webhooks found matching your criteria.
-                </div>
-            `;
+            tableContainer.innerHTML = hasFilters
+                ? renderEmptyState({
+                    title: 'Ничего не найдено',
+                    message: 'Попробуйте изменить поиск или сбросить фильтры.'
+                })
+                : renderEmptyState({
+                    title: 'Создайте первый вебхук',
+                    message: 'После создания здесь появятся endpoint URL, статусы и быстрые действия.',
+                    actionHtml: `<a class="btn btn-app-primary" href="#create">${actionLabel('plus-lg', 'Создать вебхук')}</a>`
+                });
             return;
         }
 
         const rows = items.map(webhook => `
             <tr>
                 <td>
-                    <div class="fw-semibold">${escapeHtml(webhook.name)}</div>
-                    <div class="text-muted small">${escapeHtml(webhook.slug)}</div>
+                    <div class="app-row-title">${escapeHtml(webhook.name)}</div>
+                    <div class="app-row-subtitle">${escapeHtml(webhook.slug)}</div>
                 </td>
-                <td><code>${escapeHtml(webhook.methods)}</code></td>
-                <td>${renderStatusPill(webhook.isActive)}</td>
-                <td><code class="app-code-inline">${escapeHtml(webhook.endpointUrl)}</code></td>
+                <td>
+                    <div class="app-badge-stack">
+                        ${renderStatusBadge(webhook.isActive)}
+                        ${renderDebugBadge(webhook.debugMode)}
+                    </div>
+                </td>
+                <td>
+                    <div class="app-endpoint-copy">
+                        <code class="app-code-inline">${escapeHtml(webhook.endpointUrl)}</code>
+                        <button class="btn btn-icon btn-app-ghost" type="button" title="Скопировать endpoint" data-action="copy" data-url="${escapeAttr(webhook.endpointUrl)}">
+                            ${icon('clipboard')}
+                        </button>
+                    </div>
+                </td>
+                <td><div class="app-badge-stack">${renderMethodBadges(webhook.methods)}</div></td>
                 <td>${formatDate(webhook.createdAt)}</td>
                 <td>
-                    <div class="d-flex flex-wrap gap-2">
-                        <a class="btn btn-sm btn-app-ghost" href="#webhook/${escapeAttr(webhook.id)}">View</a>
-                        <a class="btn btn-sm btn-app-ghost" href="#edit/${escapeAttr(webhook.id)}">Edit</a>
-                        <button class="btn btn-sm btn-app-tonal" type="button" data-action="toggle" data-id="${escapeAttr(webhook.id)}">
-                            ${webhook.isActive ? 'Disable' : 'Enable'}
+                    <div class="app-row-actions">
+                        <a class="btn btn-icon btn-app-ghost" title="Открыть" href="#webhook/${escapeAttr(webhook.id)}">${icon('box-arrow-up-right')}</a>
+                        <a class="btn btn-icon btn-app-ghost" title="Редактировать" href="#edit/${escapeAttr(webhook.id)}">${icon('pencil')}</a>
+                        <button class="btn btn-icon btn-app-tonal" type="button" title="${webhook.isActive ? 'Выключить' : 'Включить'}" data-action="toggle" data-id="${escapeAttr(webhook.id)}">
+                            ${icon(webhook.isActive ? 'pause-fill' : 'play-fill')}
                         </button>
-                        <button class="btn btn-sm btn-app-danger" type="button" data-action="delete" data-id="${escapeAttr(webhook.id)}" data-name="${escapeAttr(webhook.name)}">
-                            Delete
+                        <button class="btn btn-icon btn-app-danger" type="button" title="Удалить" data-action="delete" data-id="${escapeAttr(webhook.id)}" data-name="${escapeAttr(webhook.name)}">
+                            ${icon('trash3')}
                         </button>
                     </div>
                 </td>
@@ -128,30 +170,42 @@ export async function renderDashboard(container) {
         `).join('');
 
         tableContainer.innerHTML = `
-            <div class="table-responsive card">
-                <table class="table table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Webhook</th>
-                            <th>Methods</th>
-                            <th>Status</th>
-                            <th>Endpoint</th>
-                            <th>Created</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
+            <div class="app-panel">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Вебхук</th>
+                                <th>Состояние</th>
+                                <th>Endpoint</th>
+                                <th>Методы</th>
+                                <th>Создан</th>
+                                <th class="text-end">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
             </div>
         `;
 
+        tableContainer.querySelectorAll('[data-action="copy"]').forEach(button => {
+            button.addEventListener('click', async () => {
+                try {
+                    await copyText(button.dataset.url, 'Endpoint URL скопирован', showNotification);
+                } catch {
+                    showNotification('Не удалось скопировать URL', 'error');
+                }
+            });
+        });
+
         tableContainer.querySelectorAll('[data-action="toggle"]').forEach(button => {
             button.addEventListener('click', async () => {
-                await withButtonLoading(button, 'Updating...', async () => {
+                await withButtonLoading(button, '', async () => {
                     try {
                         await API.toggleWebhook(button.dataset.id);
-                        showNotification('Webhook status updated', 'success');
-                        await loadPage(currentPage);
+                        showNotification('Статус вебхука обновлён', 'success');
+                        await loadPage(state.currentPage);
                     } catch (error) {
                         showNotification(error, 'error');
                     }
@@ -162,21 +216,22 @@ export async function renderDashboard(container) {
         tableContainer.querySelectorAll('[data-action="delete"]').forEach(button => {
             button.addEventListener('click', async () => {
                 const confirmed = await confirmAction({
-                    title: 'Delete webhook',
-                    message: `Delete webhook "${button.dataset.name}"? This action cannot be undone.`,
-                    confirmText: 'Delete'
+                    title: 'Удалить вебхук',
+                    message: `Удалить вебхук "${button.dataset.name}"? История запросов тоже будет удалена.`,
+                    confirmText: 'Удалить',
+                    danger: true
                 });
                 if (!confirmed) {
                     return;
                 }
 
-                await withButtonLoading(button, 'Deleting...', async () => {
+                await withButtonLoading(button, '', async () => {
                     try {
                         await API.deleteWebhook(button.dataset.id);
-                        showNotification('Webhook deleted', 'success');
-                        const totalAfterDelete = Math.max(0, (lastResponse.total || 1) - 1);
+                        showNotification('Вебхук удалён', 'success');
+                        const totalAfterDelete = Math.max(0, (state.lastResponse.total || 1) - 1);
                         const maxPage = Math.max(0, Math.ceil(totalAfterDelete / PAGE_SIZE) - 1);
-                        await loadPage(Math.min(currentPage, maxPage));
+                        await loadPage(Math.min(state.currentPage, maxPage));
                     } catch (error) {
                         showNotification(error, 'error');
                     }
@@ -187,23 +242,23 @@ export async function renderDashboard(container) {
 
     function renderPagination() {
         const nav = document.getElementById('dashboard-pagination');
-        if (!lastResponse) {
+        if (!state.lastResponse) {
             nav.innerHTML = '';
             return;
         }
 
-        const totalPages = Math.ceil((lastResponse.total || 0) / lastResponse.size);
+        const totalPages = Math.ceil((state.lastResponse.total || 0) / state.lastResponse.size);
         if (totalPages <= 1) {
             nav.innerHTML = '';
             return;
         }
 
         let html = '<ul class="pagination">';
-        html += renderPageItem('«', currentPage - 1, currentPage === 0);
+        html += renderPageItem('Назад', state.currentPage - 1, state.currentPage === 0);
         for (let page = 0; page < totalPages; page++) {
-            html += renderPageItem(String(page + 1), page, false, page === currentPage);
+            html += renderPageItem(String(page + 1), page, false, page === state.currentPage);
         }
-        html += renderPageItem('»', currentPage + 1, currentPage >= totalPages - 1);
+        html += renderPageItem('Вперёд', state.currentPage + 1, state.currentPage >= totalPages - 1);
         html += '</ul>';
 
         nav.innerHTML = html;
@@ -211,7 +266,7 @@ export async function renderDashboard(container) {
             link.addEventListener('click', async event => {
                 event.preventDefault();
                 const page = Number(link.dataset.page);
-                if (Number.isFinite(page) && page !== currentPage) {
+                if (Number.isFinite(page) && page !== state.currentPage) {
                     await loadPage(page);
                 }
             });
@@ -220,37 +275,33 @@ export async function renderDashboard(container) {
 
     function filterItems(items) {
         return (items || []).filter(item => {
-            const matchesSearch = !searchTerm || [item.name, item.slug, item.description, item.endpointUrl]
+            const matchesSearch = !state.searchTerm || [item.name, item.slug, item.description, item.endpointUrl]
                 .filter(Boolean)
-                .some(value => String(value).toLowerCase().includes(searchTerm));
-            const matchesStatus = statusFilter === 'all'
-                || (statusFilter === 'active' && item.isActive)
-                || (statusFilter === 'inactive' && !item.isActive);
-            return matchesSearch && matchesStatus;
+                .some(value => String(value).toLowerCase().includes(state.searchTerm));
+            const matchesStatus = state.statusFilter === 'all'
+                || (state.statusFilter === 'active' && item.isActive)
+                || (state.statusFilter === 'inactive' && !item.isActive);
+            const matchesDebug = state.debugFilter === 'all'
+                || (state.debugFilter === 'on' && item.debugMode)
+                || (state.debugFilter === 'off' && !item.debugMode);
+            return matchesSearch && matchesStatus && matchesDebug;
         });
     }
 }
 
-function renderLoadingState(message) {
-    document.getElementById('dashboard-table').innerHTML = `
-        <div class="card">
-            <div class="card-body d-flex align-items-center gap-3" role="status" aria-live="polite">
-                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                <span>${escapeHtml(message)}</span>
-            </div>
-        </div>
-    `;
+function renderLoadingState() {
+    document.getElementById('dashboard-table').innerHTML = renderSkeletonTable(6, 6);
 }
 
 function renderErrorState(error, retry) {
     const feedback = document.getElementById('dashboard-feedback');
     feedback.innerHTML = `
-        <div class="alert alert-danger d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="alert alert-danger app-alert-row">
             <div>
-                <div class="fw-semibold">Failed to load webhooks</div>
+                <div class="fw-semibold">Не удалось загрузить вебхуки</div>
                 <div>${escapeHtml(error?.message || String(error))}</div>
             </div>
-            <button class="btn btn-sm btn-app-danger" type="button" id="dashboard-retry">Retry</button>
+            <button class="btn btn-sm btn-app-danger" type="button" id="dashboard-retry">${actionLabel('arrow-clockwise', 'Повторить')}</button>
         </div>
     `;
     document.getElementById('dashboard-table').innerHTML = '';
@@ -264,98 +315,7 @@ function clearFeedback() {
     }
 }
 
-async function withButtonLoading(button, label, task) {
-    const originalHtml = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${escapeHtml(label)}`;
-    try {
-        await task();
-    } finally {
-        button.disabled = false;
-        button.innerHTML = originalHtml;
-    }
-}
-
-function confirmAction({ title, message, confirmText }) {
-    return new Promise(resolve => {
-        const modal = document.createElement('div');
-        const backdrop = document.createElement('div');
-        const confirmId = `confirm-${Date.now()}`;
-
-        modal.className = 'modal fade show';
-        modal.style.display = 'block';
-        modal.setAttribute('role', 'dialog');
-        modal.setAttribute('aria-modal', 'true');
-        modal.setAttribute('aria-labelledby', `${confirmId}-title`);
-        modal.innerHTML = `
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="${confirmId}-title">${escapeHtml(title)}</h5>
-                        <button type="button" class="btn-close" data-confirm="cancel" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="mb-0">${escapeHtml(message)}</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-app-ghost" data-confirm="cancel">Cancel</button>
-                        <button type="button" class="btn btn-app-danger" data-confirm="ok">${escapeHtml(confirmText)}</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        backdrop.className = 'modal-backdrop fade show';
-        document.body.classList.add('modal-open');
-        document.body.append(backdrop, modal);
-
-        const close = value => {
-            modal.remove();
-            backdrop.remove();
-            document.body.classList.remove('modal-open');
-            resolve(value);
-        };
-
-        modal.querySelector('[data-confirm="ok"]').addEventListener('click', () => close(true));
-        modal.querySelectorAll('[data-confirm="cancel"]').forEach(button => {
-            button.addEventListener('click', () => close(false));
-        });
-        backdrop.addEventListener('click', () => close(false));
-    });
-}
-
-function renderPageItem(label, page, disabled = false, active = false) {
-    const classes = ['page-item'];
-    if (disabled) {
-        classes.push('disabled');
-    }
-    if (active) {
-        classes.push('active');
-    }
-    const pageAttrs = disabled
-        ? 'aria-disabled="true" tabindex="-1"'
-        : `data-page="${page}"`;
-    return `
-        <li class="${classes.join(' ')}">
-            <a class="page-link" href="#" ${pageAttrs} aria-label="Page ${escapeAttr(label)}">${escapeHtml(label)}</a>
-        </li>
-    `;
-}
-
-function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : '-';
-}
-
-function escapeHtml(value) {
-    const div = document.createElement('div');
-    div.textContent = value == null ? '' : String(value);
-    return div.innerHTML;
-}
-
-function escapeAttr(value) {
-    return escapeHtml(value).replace(/"/g, '&quot;');
-}
-
-function renderStatusPill(isActive) {
-    return `<span class="app-status-pill ${isActive ? 'is-active' : 'is-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`;
+function renderSummary(visible, total, hasFilters) {
+    const filterText = hasFilters ? `, показано ${visible}` : '';
+    return `${icon('collection')} Всего: ${escapeHtml(total)}${escapeHtml(filterText)}`;
 }

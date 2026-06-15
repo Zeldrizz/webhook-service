@@ -4,15 +4,27 @@
     const VERIFY_URL = '/api/auth/verify';
 
     function getKey() {
-        try { return window.localStorage.getItem(STORAGE_KEY) || ''; } catch (e) { return ''; }
+        try {
+            return window.localStorage.getItem(STORAGE_KEY) || '';
+        } catch (e) {
+            return '';
+        }
     }
 
     function setKey(value) {
-        try { window.localStorage.setItem(STORAGE_KEY, value); } catch (e) { /* ignore */ }
+        try {
+            window.localStorage.setItem(STORAGE_KEY, value);
+        } catch (e) {
+            // localStorage may be unavailable in private contexts.
+        }
     }
 
     function clearKey() {
-        try { window.localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+        try {
+            window.localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+            // localStorage may be unavailable in private contexts.
+        }
     }
 
     function isApiPath(url) {
@@ -36,7 +48,7 @@
         return originalFetch(input, init).then((response) => {
             if (response.status === 401 && isApiPath(url)) {
                 clearKey();
-                showLoginOverlay('Сессия истекла или ключ изменён. Войдите снова.');
+                showLoginOverlay('Ключ не подошёл или сессия устарела. Проверьте ADMIN_API_KEY и войдите снова.');
             }
             return response;
         });
@@ -45,65 +57,24 @@
     function buildOverlay() {
         const overlay = document.createElement('div');
         overlay.id = 'ws-auth-overlay';
-        overlay.style.cssText = [
-            'position:fixed', 'inset:0', 'z-index:9999',
-            'background:rgba(235,228,216,0.72)', 'backdrop-filter:blur(20px)',
-            'display:flex', 'align-items:center', 'justify-content:center',
-            'font-family:Manrope,system-ui,sans-serif', 'color:#1f2722',
-            'padding:24px'
-        ].join(';') + ';';
+        overlay.className = 'ws-auth-overlay';
 
         overlay.innerHTML = `
-            <form id="ws-auth-form" autocomplete="off" style="background:linear-gradient(145deg,rgba(255,252,247,0.97),rgba(244,236,224,0.94));border:1px solid rgba(199,186,168,0.9);border-radius:1.55rem;padding:32px;width:min(420px,92vw);box-shadow:0 24px 60px rgba(48,37,25,0.18);">
-                <h2 style="margin:0 0 6px;font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#1f2722;display:flex;align-items:center;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#435649"
-                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
-                         style="margin-right:8px;vertical-align:-2px;">
-                      <rect x="3" y="11" width="18" height="11" rx="2"/>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    Webhook Service
-                </h2>
-                <p style="margin:0 0 18px;font-size:13px;color:#6a7269;line-height:1.55;">Введите admin API-ключ, чтобы открыть панель управления.</p>
-                <label for="ws-auth-input" style="display:block;margin-bottom:6px;font-size:12px;color:#6a7269;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">API key</label>
-                <input id="ws-auth-input" type="password" autocomplete="current-password" required
-                       style="width:100%;padding:11px 13px;border-radius:1rem;border:1px solid rgba(199,186,168,0.9);background:rgba(255,255,255,0.74);color:#1f2722;font-family:'IBM Plex Mono',monospace;font-size:14px;outline:none;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease;" />
-                <div id="ws-auth-error" style="display:none;margin-top:10px;color:#8b5360;font-size:13px;font-weight:600;"></div>
-                <button id="ws-auth-submit" type="submit"
-                        style="margin-top:18px;width:100%;padding:12px 14px;border-radius:999px;border:none;background:linear-gradient(135deg,#435649,#2c3a31);color:#f8f5ef;font-weight:700;font-size:14px;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,background .16s ease;">
-                    Войти
+            <form id="ws-auth-form" class="ws-auth-card" autocomplete="off">
+                <div class="ws-auth-mark"><i class="bi bi-shield-lock" aria-hidden="true"></i></div>
+                <h2>Webhook Service</h2>
+                <p>Введите admin API-ключ, чтобы открыть панель управления и защищённые `/api/*` маршруты.</p>
+                <label for="ws-auth-input" class="form-label">API key</label>
+                <input id="ws-auth-input" class="form-control app-code-input" type="password" autocomplete="current-password" required placeholder="ADMIN_API_KEY">
+                <div id="ws-auth-error" class="ws-auth-error" role="alert"></div>
+                <button id="ws-auth-submit" class="btn btn-app-primary w-100" type="submit">
+                    <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i><span>Войти</span>
                 </button>
-                <p style="margin:16px 0 0;font-size:12px;color:#6a7269;line-height:1.55;">
-                    Ключ задаётся в конфигурации сервера через переменную <code style="background:rgba(67,86,73,0.09);color:#1f2722;padding:2px 7px;border-radius:999px;">ADMIN_API_KEY</code>.
-                </p>
+                <div class="ws-auth-hint">
+                    По умолчанию в demo-окружении используется ключ из переменной <code>ADMIN_API_KEY</code>.
+                </div>
             </form>
         `;
-
-        const input = overlay.querySelector('#ws-auth-input');
-        input.addEventListener('focus', () => {
-            input.style.borderColor = 'rgba(67,86,73,0.6)';
-            input.style.background = '#fffdfa';
-            input.style.boxShadow = '0 0 0 0.24rem rgba(67,86,73,0.12)';
-        });
-        input.addEventListener('blur', () => {
-            input.style.borderColor = 'rgba(199,186,168,0.9)';
-            input.style.background = 'rgba(255,255,255,0.74)';
-            input.style.boxShadow = 'none';
-        });
-
-        const btn = overlay.querySelector('#ws-auth-submit');
-        btn.addEventListener('mouseenter', () => {
-            if (!btn.disabled) {
-                btn.style.transform = 'translateY(-1px)';
-                btn.style.boxShadow = '0 12px 24px rgba(48,37,25,0.15)';
-                btn.style.background = 'linear-gradient(135deg,#37463d,#223028)';
-            }
-        });
-        btn.addEventListener('mouseleave', () => {
-            btn.style.transform = '';
-            btn.style.boxShadow = '';
-            btn.style.background = 'linear-gradient(135deg,#435649,#2c3a31)';
-        });
 
         return overlay;
     }
@@ -112,11 +83,7 @@
 
     function showLoginOverlay(message) {
         if (overlayEl) {
-            const err = overlayEl.querySelector('#ws-auth-error');
-            if (message && err) {
-                err.textContent = message;
-                err.style.display = 'block';
-            }
+            showOverlayError(message);
             return;
         }
         overlayEl = buildOverlay();
@@ -127,20 +94,19 @@
         const error = overlayEl.querySelector('#ws-auth-error');
         const submit = overlayEl.querySelector('#ws-auth-submit');
 
-        if (message) {
-            error.textContent = message;
-            error.style.display = 'block';
-        }
-
-        setTimeout(() => input.focus(), 50);
+        showOverlayError(message);
+        window.setTimeout(() => input.focus(), 50);
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
-            error.style.display = 'none';
+            error.textContent = '';
             const candidate = input.value.trim();
-            if (!candidate) return;
+            if (!candidate) {
+                error.textContent = 'Введите API-ключ.';
+                return;
+            }
             submit.disabled = true;
-            submit.textContent = 'Проверяю…';
+            submit.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Проверяю...</span>';
             try {
                 const ok = await verifyKey(candidate);
                 if (ok) {
@@ -148,17 +114,23 @@
                     hideLoginOverlay();
                     window.location.reload();
                 } else {
-                    error.textContent = 'Неверный API-ключ.';
-                    error.style.display = 'block';
+                    error.textContent = 'Неверный API-ключ. Проверьте значение ADMIN_API_KEY.';
                 }
             } catch (err) {
                 error.textContent = 'Не удалось связаться с сервером: ' + (err.message || err);
-                error.style.display = 'block';
             } finally {
                 submit.disabled = false;
-                submit.textContent = 'Войти';
+                submit.innerHTML = '<i class="bi bi-box-arrow-in-right" aria-hidden="true"></i><span>Войти</span>';
             }
         });
+    }
+
+    function showOverlayError(message) {
+        if (!overlayEl) {
+            return;
+        }
+        const error = overlayEl.querySelector('#ws-auth-error');
+        error.textContent = message || '';
     }
 
     function hideLoginOverlay() {
