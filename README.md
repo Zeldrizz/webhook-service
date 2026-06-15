@@ -116,17 +116,6 @@ webhook:
   cleanup-interval-hours: 24
 ```
 
-## Что умеет продукт
-
-Webhook Service превращает входящие HTTP-события в управляемые endpoint'ы:
-
-- **Dashboard вебхуков:** быстрый поиск, статусы active/debug, копирование endpoint URL в один клик, включение/выключение и безопасное удаление.
-- **Создание и редактирование:** поля сгруппированы как `основное → проксирование → шаблоны`, есть inline-валидация, preview request/response шаблонов и подсказки по синтаксису.
-- **Инспекция запросов:** история с фильтрами по HTTP-методу и proxy status, пагинацией без перезагрузки, JSON-viewer для headers/query/body/proxy response.
-- **Проксирование:** optional `proxyUrl`, кастомные proxy headers, retry с exponential backoff и circuit breaker для защиты hot path.
-- **Шаблонизатор:** переменные `{{body.field}}` и `${body.field}`, условия `{{#if}}`, `{{else}}`, циклы `{{#each}}`, fallback `|`/`??`, metadata `{{@index}}`, `{{@first}}`, `{{@last}}`, `{{@key}}`.
-- **Cache/Auth UX:** cache hit-ratio badge с tooltip, подтверждаемый Flush, дружелюбный login overlay для `X-API-Key` и повторный запрос ключа при 401.
-
 ## Архитектура
 
 ### Компонентная диаграмма
