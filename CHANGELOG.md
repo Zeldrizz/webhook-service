@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Zeldrizz/webhook-service/compare/v1.2.0...v1.3.0) (2026-06-15)
+
+
+### Features
+
+* final demo (Kseniia) ([98d5574](https://github.com/Zeldrizz/webhook-service/commit/98d5574ac7eeec2b191c18084412d66aae8998a8))
+
 ## [1.2.0](https://github.com/Zeldrizz/webhook-service/compare/v1.1.0...v1.2.0) (2026-06-13)
 
 
