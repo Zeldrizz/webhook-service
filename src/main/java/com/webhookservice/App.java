@@ -55,8 +55,8 @@ public class App {
 
         Vertx vertx = Vertx.vertx(options);
 
-        int instances = Integer.parseInt(
-                System.getenv().getOrDefault("VERTICLE_INSTANCES", String.valueOf(cpus)));
+        int instances = Math.max(1, Integer.parseInt(
+                System.getenv().getOrDefault("VERTICLE_INSTANCES", "1")));
         DeploymentOptions deploymentOptions = new DeploymentOptions()
                 .setInstances(instances)
                 .setHa(false);

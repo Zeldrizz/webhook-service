@@ -73,7 +73,7 @@ public record AppConfig(
                 config.getInteger("server.port", 8080),
                 config.getString("database.url", "jdbc:postgresql://localhost:5432/webhooks"),
                 config.getString("database.user", "webhook_user"),
-                config.getString("database.password", "webhook_pass"),
+                config.getString("database.password", "webhook_password"),
                 config.getInteger("database.pool-size", 32),
                 config.getInteger("database.pipelining-limit", 256),
                 config.getLong("database.connection-timeout", 30000L),
