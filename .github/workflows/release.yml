@@ -15,6 +15,14 @@ name: Release
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Force a release bump (patch/minor/major) without a conventional commit'
+        required: false
+        default: 'patch'
+        type: choice
+        options: [patch, minor, major]
 
 permissions:
   contents: write
