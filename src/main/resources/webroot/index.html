@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/app.css?v=demo6-ux-2">
+    <link rel="stylesheet" href="/css/app.css?v=demo6-ux-3">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg app-navbar">
@@ -21,11 +21,11 @@
             </span>
         </a>
         <div class="navbar-nav ms-auto align-items-lg-center">
-            <span id="cache-badge" class="app-cache-badge me-lg-2" title="Cache metrics">Cache —</span>
-            <a class="nav-link" href="#dashboard"><i class="bi bi-grid-1x2" aria-hidden="true"></i><span>Dashboard</span></a>
-            <a class="nav-link" href="#create"><i class="bi bi-plus-lg" aria-hidden="true"></i><span>Create</span></a>
+            <span id="cache-badge" class="app-cache-badge me-lg-2" title="Метрики кэша">Кэш —</span>
+            <a class="nav-link" href="#dashboard"><i class="bi bi-grid-1x2" aria-hidden="true"></i><span>Панель</span></a>
+            <a class="nav-link" href="#create"><i class="bi bi-plus-lg" aria-hidden="true"></i><span>Создать</span></a>
             <a class="nav-link" href="/swagger" target="_blank" rel="noreferrer"><i class="bi bi-file-earmark-code" aria-hidden="true"></i><span>Swagger</span></a>
-            <button class="nav-link app-nav-button" type="button" onclick="window.WSAuth && window.WSAuth.logout()"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Logout</span></button>
+            <button class="nav-link app-nav-button" type="button" onclick="window.WSAuth && window.WSAuth.logout()"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Выйти</span></button>
         </div>
     </div>
 </nav>
@@ -40,8 +40,8 @@
     </div>
 </main>
 
-<script src="/js/auth.js?v=demo6-ux-2"></script>
-<script type="module" src="/js/components/cacheAdmin.js?v=demo6-ux-2"></script>
-<script type="module" src="/js/app.js?v=demo6-ux-2"></script>
+<script src="/js/auth.js?v=demo6-ux-3"></script>
+<script type="module" src="/js/components/cacheAdmin.js?v=demo6-ux-3"></script>
+<script type="module" src="/js/app.js?v=demo6-ux-3"></script>
 </body>
 </html>

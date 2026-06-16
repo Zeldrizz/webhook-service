@@ -57,11 +57,11 @@ export async function renderDashboard(container) {
                 </select>
             </div>
             <div>
-                <label class="form-label" for="dashboard-debug">Debug</label>
+                <label class="form-label" for="dashboard-debug">Отладка</label>
                 <select id="dashboard-debug" class="form-select">
                     <option value="all">Любой</option>
-                    <option value="on">Debug on</option>
-                    <option value="off">Debug off</option>
+                    <option value="on">Вкл.</option>
+                    <option value="off">Выкл.</option>
                 </select>
             </div>
         </section>

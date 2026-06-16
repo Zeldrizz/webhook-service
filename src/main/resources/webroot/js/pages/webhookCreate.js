@@ -61,7 +61,7 @@ export async function renderWebhookCreate(container, webhookId = null) {
                         <div class="invalid-feedback" data-error-for="field-name"></div>
                     </div>
                     <div class="col-lg-6">
-                        <label class="form-label" for="field-slug-preview">Slug preview</label>
+                        <label class="form-label" for="field-slug-preview">Предпросмотр slug</label>
                         <div class="app-input-icon">
                             ${icon('link-45deg')}
                             <input class="form-control" id="field-slug-preview" type="text" readonly>
@@ -88,7 +88,7 @@ export async function renderWebhookCreate(container, webhookId = null) {
                         <div class="invalid-feedback" data-error-for="field-max-log-count"></div>
                     </div>
                     <div class="col-sm-6 col-lg-3">
-                        <label class="form-label d-block">Debug</label>
+                        <label class="form-label d-block">Режим отладки</label>
                         <div class="app-toggle-line">
                             <input class="form-check-input" id="field-debug-mode" type="checkbox" ${existing?.debugMode === false ? '' : 'checked'}>
                             <label class="form-check-label" for="field-debug-mode">Сохранять историю запросов</label>
@@ -113,7 +113,7 @@ export async function renderWebhookCreate(container, webhookId = null) {
                         <div class="form-text">Если оставить пустым, запрос будет принят без внешнего forward.</div>
                     </div>
                     <div class="col-lg-6">
-                        <label class="form-label" for="field-proxy-headers">Proxy headers</label>
+                        <label class="form-label" for="field-proxy-headers">Заголовки прокси</label>
                         <textarea class="form-control app-code-input" id="field-proxy-headers" rows="5" spellcheck="false" placeholder='{"X-Service": "webhook-demo"}'>${escapeHtml(existing?.proxyHeaders ? JSON.stringify(existing.proxyHeaders, null, 2) : '')}</textarea>
                         <div class="invalid-feedback" data-error-for="field-proxy-headers"></div>
                         <div class="form-text">JSON object; значения будут отправлены как строки.</div>
@@ -140,14 +140,14 @@ export async function renderWebhookCreate(container, webhookId = null) {
                 <div class="app-template-grid">
                     <div>
                         <div class="app-field-head">
-                            <label class="form-label" for="field-request-template">Request template</label>
-                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-request-template">${actionLabel('play-circle', 'Preview')}</button>
+                            <label class="form-label" for="field-request-template">Шаблон запроса</label>
+                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-request-template">${actionLabel('play-circle', 'Просмотр')}</button>
                         </div>
                         <textarea class="form-control app-code-input" id="field-request-template" rows="12" spellcheck="false" placeholder='{"event":"{{body.event | \"unknown\"}}"}'>${escapeHtml(existing?.requestTemplate || '')}</textarea>
                         <div class="form-text">Рендерится перед proxy-вызовом. Доступны <code>request</code>, <code>body</code>, <code>headers</code>, <code>queryParams</code>, <code>webhook</code>.</div>
                     </div>
                     <div>
-                        <label class="form-label" for="request-template-preview">Request preview</label>
+                        <label class="form-label" for="request-template-preview">Предпросмотр запроса</label>
                         <pre id="request-template-preview" class="app-preview-box" tabindex="0">Нажмите Preview или начните вводить шаблон.</pre>
                     </div>
                 </div>
@@ -155,14 +155,14 @@ export async function renderWebhookCreate(container, webhookId = null) {
                 <div class="app-template-grid">
                     <div>
                         <div class="app-field-head">
-                            <label class="form-label" for="field-response-template">Response template</label>
-                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-response-template">${actionLabel('play-circle', 'Preview')}</button>
+                            <label class="form-label" for="field-response-template">Шаблон ответа</label>
+                            <button class="btn btn-sm btn-app-tonal" type="button" id="preview-response-template">${actionLabel('play-circle', 'Просмотр')}</button>
                         </div>
                         <textarea class="form-control app-code-input" id="field-response-template" rows="10" spellcheck="false" placeholder='{"ok":true,"status":"{{proxy.status}}"}'>${escapeHtml(existing?.responseTemplate || '')}</textarea>
                         <div class="form-text">Рендерится после proxy-вызова. Доступны <code>proxy.status</code>, <code>proxy.response</code>, <code>proxy.durationMs</code>.</div>
                     </div>
                     <div>
-                        <label class="form-label" for="response-template-preview">Response preview</label>
+                        <label class="form-label" for="response-template-preview">Предпросмотр ответа</label>
                         <pre id="response-template-preview" class="app-preview-box" tabindex="0">Нажмите Preview или начните вводить шаблон.</pre>
                     </div>
                 </div>
@@ -413,10 +413,10 @@ function parseProxyHeaders(raw) {
     try {
         parsed = JSON.parse(raw);
     } catch {
-        throw validationError('field-proxy-headers', 'Headers должны быть валидным JSON object.');
+        throw validationError('field-proxy-headers', 'Заголовки должны быть валидным JSON-объектом.');
     }
     if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw validationError('field-proxy-headers', 'Headers должны быть JSON object, не массивом.');
+        throw validationError('field-proxy-headers', 'Заголовки должны быть JSON-объектом, не массивом.');
     }
     return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)]));
 }

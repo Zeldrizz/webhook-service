@@ -27,7 +27,7 @@ export async function updateCacheBadge() {
         badge.title = `Hit ratio показывает долю запросов, обслуженных из кэша. webhookBySlug: ${(webhookRatio * 100).toFixed(1)}%, compiledTemplate: ${(templateRatio * 100).toFixed(1)}%, webhook cache size: ${size}.`;
         badge.classList.remove('is-muted');
     } catch (error) {
-        badge.textContent = 'Cache —';
+        badge.textContent = 'Кэш —';
         badge.title = error?.message || String(error);
         badge.classList.add('is-muted');
     }
@@ -37,7 +37,7 @@ export async function flushCacheWithConfirmation(button = null) {
     const confirmed = await confirmAction({
         title: 'Сбросить кэш',
         message: 'Все локальные кэши будут очищены на инстансах сервиса. Следующие запросы прогреют их заново.',
-        confirmText: 'Flush',
+        confirmText: 'Сбросить',
         danger: true
     });
     if (!confirmed) {

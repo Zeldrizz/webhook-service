@@ -19,7 +19,7 @@ export async function renderRequestDetail(container, webhookId, requestId) {
             <div>
                 <div class="app-page-kicker">Request trace</div>
                 <h1 class="app-page-title">Загружаю запрос</h1>
-                <p class="app-page-subtitle">Готовлю headers, query, body и proxy response.</p>
+                <p class="app-page-subtitle">Готовлю заголовки, параметры, тело и ответ прокси.</p>
             </div>
         </section>
         ${renderSkeletonTable(4, 4)}
@@ -31,8 +31,8 @@ export async function renderRequestDetail(container, webhookId, requestId) {
         container.innerHTML = `
             <section class="app-page-head">
                 <div>
-                    <div class="app-page-kicker">Request trace</div>
-                    <h1 class="app-page-title">${escapeHtml(requestLog.method)} request</h1>
+                    <div class="app-page-kicker">Трассировка запроса</div>
+                    <h1 class="app-page-title">${escapeHtml(requestLog.method)} запрос</h1>
                     <p class="app-page-subtitle">
                         <code>${escapeHtml(requestLog.id)}</code>
                         <span class="app-inline-badges">${renderStatusCodeBadge(requestLog.responseStatus)}</span>
@@ -52,24 +52,24 @@ export async function renderRequestDetail(container, webhookId, requestId) {
                     ${summaryItem('Метод', `<span class="app-badge is-method">${escapeHtml(requestLog.method)}</span>`)}
                     ${summaryItem('URL', `<code class="app-code-inline">${escapeHtml(requestLog.url)}</code>`)}
                     ${summaryItem('Получен', escapeHtml(formatDate(requestLog.receivedAt)))}
-                    ${summaryItem('Source IP', escapeHtml(requestLog.sourceIp || '-'))}
+                    ${summaryItem('IP источника', escapeHtml(requestLog.sourceIp || '-'))}
                     ${summaryItem('Content-Type', escapeHtml(requestLog.contentType || '-'))}
-                    ${summaryItem('Proxy duration', requestLog.proxyDurationMs === null ? '-' : `${escapeHtml(requestLog.proxyDurationMs)} ms`)}
+                    ${summaryItem('Время прокси', requestLog.proxyDurationMs === null ? '-' : `${escapeHtml(requestLog.proxyDurationMs)} ms`)}
                 </div>
             </section>
 
             <section class="app-detail-grid">
-                ${sectionShell('Headers', 'section-headers', 'headers')}
-                ${sectionShell('Query parameters', 'section-query', 'query')}
+                ${sectionShell('Заголовки', 'section-headers', 'headers')}
+                ${sectionShell('Параметры запроса', 'section-query', 'query')}
             </section>
 
             <section class="app-panel">
-                ${sectionHead('Request body', 'body')}
+                ${sectionHead('Тело запроса', 'body')}
                 <div id="section-body"></div>
             </section>
 
             <section class="app-panel">
-                ${sectionHead('Proxy response', 'proxy')}
+                ${sectionHead('Ответ прокси', 'proxy')}
                 <div id="section-proxy"></div>
             </section>
         `;

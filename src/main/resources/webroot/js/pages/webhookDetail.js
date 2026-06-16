@@ -55,7 +55,7 @@ export async function renderWebhookDetail(container, webhookId) {
         container.innerHTML = `
             <section class="app-page-head">
                 <div>
-                    <div class="app-page-kicker">Webhook profile</div>
+                    <div class="app-page-kicker">Профиль вебхука</div>
                     <h1 class="app-page-title">${escapeHtml(webhook.name)}</h1>
                     <p class="app-page-subtitle">
                         <code>${escapeHtml(webhook.slug)}</code>
@@ -69,7 +69,7 @@ export async function renderWebhookDetail(container, webhookId) {
                     <button id="btn-toggle" class="btn ${webhook.isActive ? 'btn-app-tonal' : 'btn-app-primary'}" type="button">
                         ${actionLabel(webhook.isActive ? 'pause-fill' : 'play-fill', webhook.isActive ? 'Выключить' : 'Включить')}
                     </button>
-                    <button id="btn-flush-cache" class="btn btn-app-ghost" type="button">${actionLabel('stars', 'Flush')}</button>
+                    <button id="btn-flush-cache" class="btn btn-app-ghost" type="button">${actionLabel('stars', 'Сброс')}</button>
                     <button id="btn-delete" class="btn btn-app-danger" type="button">${actionLabel('trash3', 'Удалить')}</button>
                     <a href="#dashboard" class="btn btn-app-ghost">${actionLabel('arrow-left', 'Назад')}</a>
                 </div>
@@ -97,7 +97,7 @@ export async function renderWebhookDetail(container, webhookId) {
                         </dd>
                         <dt>Методы</dt>
                         <dd><div class="app-badge-stack">${renderMethodBadges(webhook.methods)}</div></dd>
-                        <dt>Max logs</dt>
+                        <dt>Макс. записей</dt>
                         <dd>${escapeHtml(webhook.maxLogCount)}</dd>
                         <dt>Создан</dt>
                         <dd>${formatDate(webhook.createdAt)}</dd>
@@ -115,7 +115,7 @@ export async function renderWebhookDetail(container, webhookId) {
                     <dl class="app-def-list">
                         <dt>Proxy URL</dt>
                         <dd>${webhook.proxyUrl ? `<code class="app-code-inline">${escapeHtml(webhook.proxyUrl)}</code>` : '-'}</dd>
-                        <dt>Headers</dt>
+                        <dt>Заголовки</dt>
                         <dd><pre class="app-preview-box compact mb-0">${escapeHtml(JSON.stringify(webhook.proxyHeaders || {}, null, 2))}</pre></dd>
                     </dl>
                 </div>
@@ -123,11 +123,11 @@ export async function renderWebhookDetail(container, webhookId) {
 
             <section class="app-detail-grid">
                 <div class="app-panel">
-                    <div class="app-panel-head"><h2>Request template</h2></div>
+                    <div class="app-panel-head"><h2>Шаблон запроса</h2></div>
                     <pre class="app-preview-box compact mb-0">${escapeHtml(webhook.requestTemplate || 'Не задан. В proxy уйдёт исходное тело запроса.')}</pre>
                 </div>
                 <div class="app-panel">
-                    <div class="app-panel-head"><h2>Response template</h2></div>
+                    <div class="app-panel-head"><h2>Шаблон ответа</h2></div>
                     <pre class="app-preview-box compact mb-0">${escapeHtml(webhook.responseTemplate || 'Не задан. Клиент получит proxy response или accepted response.')}</pre>
                 </div>
             </section>
@@ -153,10 +153,10 @@ export async function renderWebhookDetail(container, webhookId) {
                         <label class="form-label" for="logs-status-filter">Статус</label>
                         <select id="logs-status-filter" class="form-select">
                             <option value="all">Все</option>
-                            <option value="2xx">2xx success</option>
-                            <option value="3xx">3xx redirect</option>
-                            <option value="4xx">4xx client</option>
-                            <option value="5xx">5xx server</option>
+                            <option value="2xx">2xx успех</option>
+                            <option value="3xx">3xx редирект</option>
+                            <option value="4xx">4xx клиент</option>
+                            <option value="5xx">5xx сервер</option>
                             <option value="none">Без proxy ответа</option>
                         </select>
                     </div>
@@ -341,9 +341,9 @@ export async function renderWebhookDetail(container, webhookId) {
                         <tr>
                             <th>Время</th>
                             <th>Метод</th>
-                            <th>Proxy status</th>
-                            <th>Duration</th>
-                            <th>Source IP</th>
+                            <th>Статус прокси</th>
+                            <th>Длительность</th>
+                            <th>IP</th>
                             <th class="text-end">Просмотр</th>
                         </tr>
                     </thead>
