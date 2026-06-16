@@ -63,7 +63,7 @@
             <form id="ws-auth-form" class="ws-auth-card" autocomplete="off">
                 <div class="ws-auth-mark"><i class="bi bi-shield-lock" aria-hidden="true"></i></div>
                 <h2>Webhook Service</h2>
-                <p>Введите admin API-ключ, чтобы открыть панель управления и защищённые `/api/*` маршруты.</p>
+                <p>Введите admin API-ключ, чтобы открыть панель управления и защищённые <code>/api/*</code> маршруты.</p>
                 <label for="ws-auth-input" class="form-label">API key</label>
                 <input id="ws-auth-input" class="form-control app-code-input" type="password" autocomplete="current-password" required placeholder="ADMIN_API_KEY">
                 <div id="ws-auth-error" class="ws-auth-error" role="alert"></div>
