@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/Zeldrizz/webhook-service/compare/v1.3.0...v1.3.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* escape backticks in auth.js template literal — caused unterminated comment crash ([6ae9587](https://github.com/Zeldrizz/webhook-service/commit/6ae95878d316a7a8db22f51ade4064e63997788d))
+* **ui:** translate remaining English labels to Russian, bump asset version ([7d25e87](https://github.com/Zeldrizz/webhook-service/commit/7d25e87078dcab01be8ecdb63f013b8f0f79003b))
+
 ## [1.3.0](https://github.com/Zeldrizz/webhook-service/compare/v1.2.0...v1.3.0) (2026-06-15)
 
 
